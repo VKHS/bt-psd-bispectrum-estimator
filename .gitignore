@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+# simulator and tool output
+sim/work/
+sim/*.log
+*.vcd
+*.fst
+*.wdb
+xsim.dir/
+obj_dir/
+*.jou
+*.backup.log
+.Xil/
+fpga/build/

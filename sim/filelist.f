@@ -1,0 +1,13 @@
++incdir+rtl
++incdir+sim/vectors
+rtl/delay_line.v
+rtl/ram_1r1w.v
+rtl/cru_rom.v
+rtl/cru_rotate.v
+rtl/r8_butterfly.v
+rtl/fft512_mem.v
+rtl/mag_sq_odd.v
+rtl/psd_engine.v
+rtl/bt_psd_top.v
+rtl/bispectrum_engine.v
+rtl/bt_bispectrum_top.v

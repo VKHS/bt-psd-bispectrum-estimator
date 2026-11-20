@@ -1,0 +1,9 @@
+signal,wl,mean_cycles_per_segment_513_bins,max_cycles_per_segment,max_cycles_single_bin,serial_squarer_units_needed_for_R0.88
+white,10,919.0,966.0,7.0,1.58
+white,16,55723.0,59005.0,369.0,95.77
+pink,10,702.1,772.0,71.0,1.21
+pink,16,40113.1,44195.0,4462.0,68.94
+eeg_like,10,605.7,656.0,44.0,1.04
+eeg_like,16,31331.5,34145.0,2780.0,53.85
+ar2_narrowband,10,575.7,630.0,23.0,0.99
+ar2_narrowband,16,25633.1,29132.0,1466.0,44.06

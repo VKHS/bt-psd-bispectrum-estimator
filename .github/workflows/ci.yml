@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Unit tests (model and RTL transliteration)
+        run: python -m pytest -q
+      - name: Structural lint of the Verilog sources
+        run: python scripts/lint_rtl.py
+
+  rtl-sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Run the self-checking testbenches
+        run: make -C sim -k all
+      - name: Summary
+        if: always()
+        run: grep -h "TB_RESULT" sim/work/*.log || true

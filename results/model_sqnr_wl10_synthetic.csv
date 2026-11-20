@@ -1,0 +1,17 @@
+signal,window,sqnr_vs_exact_welch_db
+white,rect,16.504
+white,hamming,15.979
+white,hann,15.356
+white,blackman,14.139
+pink,rect,24.977
+pink,hamming,28.367
+pink,hann,28.41
+pink,blackman,28.046
+eeg_like,rect,30.752
+eeg_like,hamming,29.843
+eeg_like,hann,28.677
+eeg_like,blackman,27.912
+ar2_narrowband,rect,22.781
+ar2_narrowband,hamming,21.805
+ar2_narrowband,hann,21.599
+ar2_narrowband,blackman,21.058
