@@ -21,6 +21,8 @@ from .bispectrum import BispecConfig, bispectrum_fixed
 from .cordic import default_rom, rotate_fixed
 from .estimator import HwConfig, psd_fixed
 from .r8fft import dft8_fixed, r8fft_fixed, to_fixed
+from .rtlmodel import LAT
+from .schedule import schedule_cycles
 from . import signals as sg
 
 __all__ = [
@@ -166,7 +168,9 @@ def fft_vectors(wl: int = 16, tol: float = 0.01, seed: int = 3) -> dict:
     re = np.array(chunks_r, dtype=np.int64)
     im = np.array(chunks_i, dtype=np.int64)
     Yr, Yi = r8fft_fixed(re, im, rom, wl, "round")
-    return {"wl": wl, "in_re": re.ravel(), "in_im": im.ravel(), "out_re": Yr.ravel(), "out_im": Yi.ravel(), "nchunks": 4}
+    sched = schedule_cycles(LAT)  # first issue to the cycle in which the last written word can be read
+    return {"wl": wl, "in_re": re.ravel(), "in_im": im.ravel(), "out_re": Yr.ravel(), "out_im": Yi.ravel(), "nchunks": 4,
+            "total_cycles": sched["total_cycles"], "stall_cycles": int(sum(sched["stalls_per_pass"]))}
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +228,7 @@ All files are `$readmemh` text, one word per line, lower-case hex, two's complem
 | `bfly_wl16_in.mem` / `bfly_wl16_out.mem` | in `{xr_bus[128], xi_bus[128], tq_bus[70]}`, out `{yr_bus[128], yi_bus[128]}`; slot `m` at bit `16m`, twiddle slot `k=1..7` at bit `10(k-1)` | `tb/tb_r8_butterfly.v` |
 | `fft_wl16_in_re.mem`, `fft_wl16_in_im.mem` | 4 chunks x 512 words, natural order | `tb/tb_fft512_mem.v` |
 | `fft_wl16_out_re.mem`, `fft_wl16_out_im.mem` | 4 chunks x 512 words, natural frequency order, scale 1/512 | `tb/tb_fft512_mem.v` |
+| `fft_wl16.vh` | Verilog macros: chunks, `FFT_TOTAL_CYCLES` (model: first issue to last readable word = start edge to `done`), `FFT_STALL_CYCLES` | `tb/tb_fft512_mem.v` |
 | `sq_wl16_in.mem` / `sq_wl16_out.mem` | in `{re[16], im[16]}`, out `re^2 + im^2` (32 bit) | `tb/tb_mag_sq_odd.v` |
 | `psd_wl12_x.mem` | 4 chunks x 512 real sample codes (12 bit) | `tb/tb_psd_top.v` |
 | `psd_wl12_P.mem` | 1024 words, accumulated and shifted power `P_int` | `tb/tb_psd_top.v` |

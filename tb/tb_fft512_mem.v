@@ -2,9 +2,10 @@
 // Loads each chunk in natural order, runs the three passes, reads the spectrum in natural frequency order.
 // Run from the repository root:  make -C sim fft
 `timescale 1ns / 1ps
+`include "fft_wl16.vh"
 
 module tb_fft512_mem;
-    localparam WL = 16, NCH = 4;
+    localparam WL = 16, NCH = `FFT_NCHUNKS;
 
     reg clk = 1'b0, rst_n = 1'b0;
     always #5 clk = ~clk;
@@ -43,13 +44,19 @@ module tb_fft512_mem;
             @(negedge clk);  ld_en = 1'b0;
             @(negedge clk);  start = 1'b1;
             @(negedge clk);  start = 1'b0;
-            cycles = 1;
+            // start is sampled at the first rising edge after it is raised; the first butterfly issues in the cycle that
+            // begins there, so `cycles` counts rising edges from that one to the edge at which done becomes visible.
+            cycles = 0;
             while (!done && cycles < 1000) begin @(negedge clk); cycles = cycles + 1; end
             if (!done) begin
                 errs = errs + 1;
                 $display("chunk %0d: no done pulse within 1000 cycles", c);
+            end else if (cycles != `FFT_TOTAL_CYCLES) begin
+                errs = errs + 1;
+                $display("chunk %0d: transform took %0d cycles, model schedule_cycles says %0d", c, cycles, `FFT_TOTAL_CYCLES);
             end else begin
-                $display("chunk %0d: transform finished %0d cycles after start (model schedule_cycles: 192 + stall + latency - 1 from the first issue)", c, cycles);
+                $display("chunk %0d: transform took %0d cycles from the start edge to done (= model: %0d stall cycles included)",
+                         c, cycles, `FFT_STALL_CYCLES);
             end
             for (n = 0; n < 513; n = n + 1) begin
                 @(negedge clk);
