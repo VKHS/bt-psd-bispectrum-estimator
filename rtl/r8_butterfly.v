@@ -27,6 +27,16 @@ module r8_butterfly #(
     localparam LC = `LAT_CRU;
 
     // ---- arithmetic helpers --------------------------------------------------------
+    // Clamp a (WL+2)-bit two's-complement value to WL bits: it fits exactly when its top three bits agree.
+    function signed [WL-1:0] sat_wl;
+        input signed [WL+1:0] t;
+        begin
+            if (t[WL+1] == t[WL] && t[WL] == t[WL-1]) sat_wl = t[WL-1:0];
+            else if (t[WL+1])                         sat_wl = {1'b1, {(WL-1){1'b0}}};
+            else                                      sat_wl = {1'b0, {(WL-1){1'b1}}};
+        end
+    endfunction
+
     // (a + b) >> 1 and (a - b) >> 1 with rounding, clamped to WL bits.  The clamp only matters for the difference
     // of the two extreme codes: (2^(WL-1) - 1) - (-2^(WL-1)) + 1 halves to +2^(WL-1), one above the largest code.
     function signed [WL-1:0] hadd;
@@ -37,8 +47,7 @@ module r8_butterfly #(
             t = a + b;
             if (ROUND) t = t + 1;
             t = t >>> 1;
-            if (t[WL+1:WL-1] == 3'b010) hadd = {1'b0, {(WL-1){1'b1}}};
-            else                        hadd = t[WL-1:0];
+            hadd = sat_wl(t);
         end
     endfunction
 
@@ -50,8 +59,7 @@ module r8_butterfly #(
             t = a - b;
             if (ROUND) t = t + 1;
             t = t >>> 1;
-            if (t[WL+1:WL-1] == 3'b010) hsub = {1'b0, {(WL-1){1'b1}}};
-            else                        hsub = t[WL-1:0];
+            hsub = sat_wl(t);
         end
     endfunction
 
