@@ -130,7 +130,7 @@ Each item was checked on the printed page. They are candidates for the authors t
 | 8 | Eq. (30) | `|B| = |F(f1)| + |F(f2)| + |F(f1+f2)|` | `B = F(f1) F(f2) F*(f1+f2)` gives the product of the three magnitudes (the phase relation (29) is the one with sums) |
 | 9 | Eq. (32) | third-order cumulant with products of `C2y` terms and a third lag `tau3` | `C2y` and `tau3` are not defined for a two-lag cumulant; the `C2y C2y` pairings are the terms of the fourth-order cumulant. The repository uses the segment-averaged third-order moment of mean-removed data (`third_order_cumulant`) |
 | 10 | Table 6 | 128 rows with a label `k pi/512` and a coefficient pair `(a, b)` | in 27 of 128 rows the angle of `(a, b)` differs from the label by more than the stated 0.01 rad (1.63 steps of pi/512), up to 33 steps (row 8: label pi/64 with (20, 5)); `data/table6_printed.csv` lists the rows and `paperdata.table6_printed()` flags them. The ROM of this repository does not use Table 6 |
-| 11 | Table 1, row R113 | first entry 340, later entry 1361 | the neighbours follow `8 i - 504` (R112: 392, R114: 408) and +32 steps (1505, 1633), which gives 400 and 1601 |
+| 11 | Table 2, row R113 | first entry 340, later entry 1361 | the neighbours follow `8 i - 504` (R112: 392, R114: 408) and +32 steps (1505, 1633), which gives 400 and 1601 |
 | 12 | Table 8 | columns "Unrolled C." and "Single C." | no values under either heading; the caption lists the window order Rectangular, Hamming, Hann, Blackman, which matches the row order |
 
 Item 3 changes nothing in the results; items 1, 4-7 matter if the equations are used as implementation references.

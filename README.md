@@ -9,7 +9,7 @@ The design computes a 1024-bin power spectrum from overlapping 512-sample chunks
 memory-based radix-8 FFT, a 6-tap fractional-delay merge of the chunk spectra, a frequency-domain window and a
 sum-of-odds squarer, and a direct bispectrum `B(f1, f2) = F(f1) F(f2) F*(f1 + f2)` from the same FFT core.
 
-**Status.** The Python model is tested (73 tests). The RTL is simulated: `make -C sim all` compiles it with Icarus
+**Status.** The Python model is tested (76 tests). The RTL is simulated: `make -C sim all` compiles it with Icarus
 Verilog (`iverilog -g2005 -Wall`) and runs six self-checking testbenches, which match the golden vectors of the model bit
 for bit (rotator 9216 vectors, butterfly 2048, squarer 1024, FFT 4 chunks, PSD 1024 bins, bispectrum 32 x 32 bins).
 The PSD and bispectrum inputs end in full-scale, hard-clipped segments, on which the butterfly clamp fires inside the
@@ -24,6 +24,8 @@ and uses synthetic signals.
 | Testbenches and golden vectors | `tb/`, `sim/` | 6 of 6 pass (`make sim`, CI) |
 | Experiments and figures | `results/`, `docs/figures/`, `docs/paper_figures/` | regenerable with `make experiments figures` |
 | Notes on the paper (findings, candidate errata) | `docs/PAPER_NOTES.md` | |
+| Paper-to-code map: sections, equations (1)-(32), tables 1-10, figures 1-32 | `docs/PAPER_TO_CODE.md` | complete |
+| The ten tables of the paper, as printed | `data/` | all ten present, loaders and tests |
 | Architecture, arithmetic contract, differences from the paper | `docs/ARCHITECTURE.md` | |
 
 ## Quick start
@@ -113,24 +115,27 @@ rotator, `fig07` window, squarer and accumulator, `fig08` bispectrum datapath, `
 python/btpsd/        models: fixedpoint, windows, fdfilter, reference (Welch), cordic (rotator ROM), r8fft + schedule,
                      squarer, estimator (PSD), bispectrum, rtlmodel (transliteration of the RTL), vectors, signals,
                      metrics, paperdata, viz
-python/tests/        73 unit tests
-python/scripts/      run_experiments, make_diagrams_a/b/c, make_plots, gen_cru_rom, gen_rtl, gen_vectors
+python/tests/        76 unit tests
+python/scripts/      run_experiments, make_diagrams_a/b/c, make_plots, gen_cru_rom, gen_rtl, gen_vectors,
+                     extract_paper_tables
 rtl/                 Verilog-2001 reference implementation (see rtl/README.md)
 tb/                  six self-checking testbenches
 sim/                 Makefile for Icarus Verilog, golden vectors (sim/vectors, see its README.md)
 scripts/lint_rtl.py  structural check of the Verilog sources
 fpga/                out-of-context Vivado synthesis script (untested)
-data/                values reported by the paper (paper_*.csv, table6_printed.csv) and generated ROM tables
+data/                the ten tables of the paper as printed (README.md lists them) and the generated ROM tables
 results/             model experiments with provenance.json
-docs/                ARCHITECTURE.md, PAPER_NOTES.md, figures/, paper_figures/
+docs/                ARCHITECTURE.md, PAPER_NOTES.md, PAPER_TO_CODE.md, figures/, paper_figures/
+legacy/              the original files of the repository, unchanged (legacy/README.md)
 ```
 
-The previous contents of `rtl/` and the ROM generator scripts were replaced by the sources listed in `rtl/README.md`;
-they remain available in the git history.
+The original files of the repository are kept unchanged in `legacy/`; the maintained sources are the ones listed in
+`rtl/README.md` and `python/btpsd/`.
 
 ## Further reading
 
 1. `docs/ARCHITECTURE.md` - dataflow, arithmetic contract shared by model and RTL, FFT schedule, differences from the
    paper's overlapped design, verification map.
 2. `docs/PAPER_NOTES.md` - findings on the paper's claims, SQNR definitions, squarer throughput, candidate errata.
-3. `rtl/README.md`, `sim/vectors/README.md` - RTL files, parameters, vector formats.
+3. `docs/PAPER_TO_CODE.md` - every section, equation, table and figure of the paper and where it lives here.
+4. `rtl/README.md`, `sim/vectors/README.md`, `data/README.md` - RTL files, parameters, vector formats, tables.

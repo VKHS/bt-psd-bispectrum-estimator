@@ -20,7 +20,12 @@ import numpy as np
 
 __all__ = [
     "DATA_DIR",
+    "table1",
+    "table2",
     "table3",
+    "table4",
+    "table5",
+    "table7",
     "table6_printed",
     "table8",
     "table9",
@@ -34,6 +39,41 @@ DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 def _rows(name: str) -> list[dict]:
     with open(DATA_DIR / name, newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
+
+
+def _register_table(name: str) -> dict[str, dict[int, int | None]]:
+    out = {}
+    for r in _rows(name):
+        out[r["register"]] = {int(k.split("_")[1]): (None if v == "-" else int(v))
+                              for k, v in r.items() if k.startswith("clock_")}
+    return out
+
+
+def table1() -> dict[str, dict[int, int | None]]:
+    """Paper Table 1 as printed: register ``R0..R63`` -> clock (0..15) -> address (``None`` = dash)."""
+    return _register_table("paper_table1_register_sequence_1.csv")
+
+
+def table2() -> dict[str, dict[int, int | None]]:
+    """Paper Table 2 as printed: register ``R64..R127`` -> clock (8..22) -> address (``None`` = dash)."""
+    return _register_table("paper_table2_register_sequence_2.csv")
+
+
+def table4() -> dict[str, int]:
+    """Paper Table 4: significant taps of the frequency response of each window (as printed)."""
+    return {r["window"]: int(r["significant_taps_printed"]) for r in _rows("paper_table4_window_significant_taps.csv")}
+
+
+def table5() -> list[dict]:
+    """Paper Table 5 as printed (``printed_*``) next to the analytic values ``2**-n`` and ``atan(2**-n)``."""
+    return [{"n": int(r["n"]), "printed_tg": float(r["printed_tg_wi"]), "printed_angle_deg": float(r["printed_angle_deg"]),
+             "tg": float(r["computed_2^-n"]), "angle_deg": float(r["computed_atan_deg"])}
+            for r in _rows("paper_table5_dyadic_micro_rotations.csv")]
+
+
+def table7() -> dict[str, str]:
+    """Paper Table 7: data code of the test-bench record of each signal (as printed)."""
+    return {r["signal"]: r["data_code_printed"] for r in _rows("paper_table7_testbench_data_codes.csv")}
 
 
 def table3() -> dict[int, float]:
