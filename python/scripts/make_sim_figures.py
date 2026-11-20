@@ -1,7 +1,9 @@
-"""Figure sheets drawn from the RTL-simulation results in ``results/rtl_*.csv`` (19: interface timing, 20: cycle budget).
+"""Figure sheets drawn from the RTL-simulation results in ``results/rtl_*.csv`` (19: interface timing, 20: cycle budget,
+23: configuration matrix).
 
 Every number on these sheets was printed by the testbenches during the Icarus Verilog run of the CI workflow
-(``scripts/ingest_ci_traces.py`` stores it, ``results/rtl_sim_provenance.json`` says which run); the Python models enter
+(``scripts/ingest_ci_traces.py`` stores it, ``results/rtl_sim_provenance.json`` says which run; the matrix of sheet 23 comes
+from ``scripts/ingest_ci_matrix.py`` and ``results/rtl_config_matrix_provenance.json``); the Python models enter
 only as hollow markers that are compared with the simulation, never as data.
 """
 from __future__ import annotations
@@ -9,6 +11,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import textwrap
 
 import numpy as np
 from matplotlib.patches import Polygon, Rectangle
@@ -296,11 +299,79 @@ def fig20_cycle_budget():
     D.save(FIGS / "fig20_cycle_budget")
 
 
+def fig23_rtl_config_matrix(src=RESULTS, out=None):
+    """Which configurations of the PSD and bispectrum top levels were simulated, and that each matched the model bit for bit."""
+    with (src / "rtl_config_matrix.csv").open() as f:
+        data = list(csv.DictReader(f))
+    prov = json.loads((src / "rtl_config_matrix_provenance.json").read_text())
+    cell = {(r["kind"], int(r["round"]), r["squarer"], r["window"], int(r["wl"])): r for r in data}
+    n_psd = sum(r["kind"] == "psd" for r in data)
+    n_bsp = len(data) - n_psd
+    D = Diagram(150, 106, "RTL against the model: word length, window, rounding and squarer variants",
+                subtitle=f"One run of tb_psd_top or tb_bispectrum_top per cell, on vectors made by the model (CI run {prov['run_id']}, commit "
+                         f"{prov['commit'][:7]}, Icarus Verilog). PASS: every result word equals the model's. Empty cell: not run.")
+    wls = (10, 12, 14, 16)
+    windows = (("rect", "rectangular"), ("hann", "Hann"), ("hamming", "Hamming"), ("blackman", "Blackman"))
+    cw, ch, gap = 7.6, 6.0, 0.7
+    edge_ok, fill_ok = PAL["aqua"], tint(PAL["aqua"], 0.80)
+
+    def grid(x, y, w, h, tag, title, sub, kind, rnd, squarer):
+        _panel_card(D, x, y, w, h, tag, title, sub)
+        x0 = x + 12.2
+        for j, wl in enumerate(wls):
+            D.text(x0 + j * (cw + gap) + cw / 2, y + h - 12.0, f"WL {wl}", fs=5.2, color=INK2)
+        for i, (key, label) in enumerate(windows):
+            yc = y + h - 17.6 - i * (ch + gap)
+            D.text(x + 2.4, yc, label, fs=5.4, ha="left", color=INK2)
+            for j, wl in enumerate(wls):
+                xl = x0 + j * (cw + gap)
+                r = cell.get((kind, rnd, squarer, key, wl))
+                if r is None:
+                    D.ax.add_patch(Rectangle((xl, yc - ch / 2), cw, ch, fc="none", ec=GRID, lw=0.7, ls=(0, (2.0, 2.0)), zorder=3))
+                    continue
+                assert r["result"] == "PASS", r
+                D.ax.add_patch(Rectangle((xl, yc - ch / 2), cw, ch, fc=fill_ok, ec=edge_ok, lw=0.9, zorder=3))
+                D.text(xl + cw / 2, yc + 0.9, "PASS", fs=5.0, bold=True)
+                D.text(xl + cw / 2, yc - 1.55, f"{r['model_clamped_diffs']} clamps", fs=3.9, color=INK2)
+
+    pw, ph = 47.3, 44.0
+    xs = [2.0, 2.0 + pw + 2.05, 2.0 + 2 * (pw + 2.05)]
+    grid(xs[0], 50, pw, ph, "(a)", "PSD, round, serial squarer", f"bt_psd_top, WL = 10 to 16, {sum(1 for r in data if r['kind'] == 'psd' and r['round'] == '1' and r['squarer'] == 'serial')} runs", "psd", 1, "serial")
+    grid(xs[1], 50, pw, ph, "(b)", "PSD, truncate, serial squarer", f"ROUND = 0, {sum(1 for r in data if r['kind'] == 'psd' and r['round'] == '0')} runs", "psd", 0, "serial")
+    grid(xs[2], 50, pw, ph, "(c)", "PSD, round, multiplier squarer", f"SQ_SERIAL = 0, {sum(1 for r in data if r['squarer'] == 'multiplier')} runs", "psd", 1, "multiplier")
+    grid(xs[0], 2, pw, ph, "(d)", "Bispectrum, round", f"bt_bispectrum_top, 32 x 32 bins, {sum(1 for r in data if r['kind'] == 'bsp' and r['round'] == '1')} runs", "bsp", 1, "-")
+    grid(xs[1], 2, pw, ph, "(e)", "Bispectrum, truncate", f"ROUND = 0, {sum(1 for r in data if r['kind'] == 'bsp' and r['round'] == '0')} runs", "bsp", 0, "-")
+
+    _panel_card(D, xs[2], 2, pw, ph, "(f)", "Reading the matrix", f"{n_psd} PSD and {n_bsp} bispectrum runs, all PASS")
+    notes = [
+        "'clamps': rounded butterfly differences that the model clamps in the vectors; the clamp exists only with rounding, so the "
+        "truncating runs show 0.",
+        "The vectors end in full-scale, hard-clipped segments, so saturating paths are part of every comparison.",
+        "The expected values come from the model: this checks the RTL against the model, not the model against the paper.",
+        "Not covered: the empty cells, other simulators, gate level, synthesis, timing, power. The block testbenches (rotator, "
+        "butterfly, squarer, FFT core) run at WL = 16 only.",
+    ]
+    yy = 2 + ph - 11.5
+    for t in notes:
+        lines = textwrap.wrap(t, 66)
+        for k, ln in enumerate(lines):
+            D.text(xs[2] + 2.4, yy - 2.2 * k, ln, fs=4.5, ha="left", color=INK2)
+        yy -= 2.2 * len(lines) + 1.8
+    D.save(out or FIGS / "fig23_rtl_config_matrix")
+
+
+def _has_matrix():
+    return (RESULTS / "rtl_config_matrix.csv").exists() and (RESULTS / "rtl_config_matrix_provenance.json").exists()
+
+
 FIGURES = [fig19_interface_timing, fig20_cycle_budget]
 
 
 def main():
-    for fn in FIGURES:
+    figs = FIGURES + ([fig23_rtl_config_matrix] if _has_matrix() else [])
+    if not _has_matrix():
+        print("no results/rtl_config_matrix.csv yet: sheet 23 not drawn")
+    for fn in figs:
         fn()
         print("wrote", fn.__name__)
 

@@ -7,6 +7,7 @@ This script generates the golden vectors of the model for further configurations
     PYTHONPATH=python python3 python/scripts/run_rtl_matrix.py            # all configurations (needs iverilog)
     PYTHONPATH=python python3 python/scripts/run_rtl_matrix.py --list     # the configurations, no simulator needed
     PYTHONPATH=python python3 python/scripts/run_rtl_matrix.py --only psd_wl10_hann_r1_s1
+    PYTHONPATH=python python3 python/scripts/run_rtl_matrix.py --shard 2/4    # one fourth of the work (CI runs 4 jobs)
 
 What varies is what the RTL exposes as parameters: ``WL`` (word length), the window taps ``WM2 .. WP2``, ``ROUND``
 (1: round half up, 0: truncate) and ``SQ_SERIAL`` (serial sum-of-odds squarer or multiplier).  The vectors are written to
@@ -84,6 +85,26 @@ def configurations() -> list[Config]:
     cfgs = psd + bsp
     assert len({c.tag for c in cfgs}) == len(cfgs)
     return cfgs
+
+
+def cost(c: Config) -> float:
+    """Rough simulation time in seconds on a CI runner: about 22 s per PSD run plus the cycles of the serial squarer
+    (21 757 at WL = 12, four times as many per two more bits) at about 5 000 cycles/s; 4 s per bispectrum run."""
+    if c.kind == "bsp":
+        return 4.0
+    return 22.0 + (21757 * 4 ** ((c.wl - 12) / 2) / 5000 if c.serial else 0.0)
+
+
+def shard(cfgs: list[Config], i: int, n: int) -> list[Config]:
+    """The configurations of shard ``i`` (1-based) of ``n``: longest-processing-time assignment by :func:`cost`."""
+    assert 1 <= i <= n
+    load, bins = [0.0] * n, [[] for _ in range(n)]
+    for c in sorted(cfgs, key=lambda c: (-cost(c), c.tag)):
+        k = min(range(n), key=lambda j: (load[j], j))
+        bins[k].append(c.tag)
+        load[k] += cost(c)
+    keep = set(bins[i - 1])
+    return [c for c in cfgs if c.tag in keep]  # canonical order
 
 
 @contextlib.contextmanager
@@ -191,6 +212,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--list", action="store_true", help="print the configurations and exit")
     ap.add_argument("--only", nargs="*", default=None, help="run only these tags")
+    ap.add_argument("--shard", default=None, metavar="I/N", help="run shard I of N (1-based), balanced by estimated time")
     ap.add_argument("--csv", type=Path, default=None, help="also write the result table to this CSV file")
     ap.add_argument("--iverilog", default="iverilog")
     ap.add_argument("--vvp", default="vvp")
@@ -203,6 +225,9 @@ def main() -> int:
             print(f"unknown tags: {sorted(unknown)}", file=sys.stderr)
             return 2
         cfgs = [c for c in cfgs if c.tag in args.only]
+    if args.shard:
+        i, n = (int(v) for v in args.shard.split("/"))
+        cfgs = shard(cfgs, i, n)
     if args.list:
         for c in cfgs:
             print(c.tag)

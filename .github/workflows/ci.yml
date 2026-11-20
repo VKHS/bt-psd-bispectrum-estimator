@@ -33,6 +33,10 @@ jobs:
 
   rtl-matrix:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,5 +46,5 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Install Icarus Verilog
         run: sudo apt-get update && sudo apt-get install -y iverilog
-      - name: RTL against the model for word lengths, windows, rounding and squarer variants
-        run: PYTHONPATH=python python python/scripts/run_rtl_matrix.py --csv rtl_config_matrix.csv
+      - name: RTL against the model for word lengths, windows, rounding and squarer variants (shard ${{ matrix.shard }} of 4)
+        run: PYTHONPATH=python python python/scripts/run_rtl_matrix.py --shard ${{ matrix.shard }}/4

@@ -2,12 +2,13 @@
 # `make sim` additionally needs Icarus Verilog (iverilog, vvp).
 PY ?= python3
 
-.PHONY: help test lint sim vectors experiments figures check
+.PHONY: help test lint sim matrix vectors experiments figures check
 
 help:
 	@echo "test         unit tests of the Python model and of the RTL transliteration"
 	@echo "lint         structural check of the Verilog sources"
 	@echo "sim          RTL testbenches with Icarus Verilog (needs the golden vectors in sim/vectors)"
+	@echo "matrix       RTL against the model for 25 word-length, window, rounding and squarer variants (Icarus Verilog)"
 	@echo "vectors      regenerate rtl/cru_rom.v, rtl/btpsd_consts.vh and sim/vectors/*"
 	@echo "experiments  regenerate results/*.csv (about half a minute)"
 	@echo "figures      regenerate docs/figures/* (22 sheets; fig19 and fig20 read results/rtl_*.csv)"
@@ -23,6 +24,9 @@ check: test lint
 
 sim:
 	$(MAKE) -C sim -k all
+
+matrix:
+	$(MAKE) -C sim matrix
 
 vectors:
 	$(MAKE) -C sim vectors
