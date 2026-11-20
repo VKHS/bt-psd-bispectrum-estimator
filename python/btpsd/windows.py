@@ -32,6 +32,8 @@ __all__ = [
     "approx_spectral_kernel",
     "apply_window_freq",
     "TABLE4_SIGNIFICANT_TAPS",
+    "window_metrics",
+    "kernel_exactness",
 ]
 
 # name -> (a0, a1, a2) of  w[n] = a0 - a1 cos(2 pi n / L) + a2 cos(4 pi n / L)
@@ -133,3 +135,45 @@ def apply_window_freq(X, kernel: dict[int, float], axis: int = -1) -> np.ndarray
     for d, c in kernel.items():
         out = out + c * np.roll(X, d, axis=axis)
     return out
+
+
+def window_metrics(name: str, L: int = 1024, pad: int = 64) -> dict[str, float]:
+    """Classical figures of merit of a periodic window, computed from its zero-padded DFT (frequencies in DFT bins).
+
+    ``cg``          coherent gain ``mean(w)`` (the DC response, = ``a0``)
+    ``enbw``        equivalent noise bandwidth ``L sum(w^2) / sum(w)^2``
+    ``bw3``         -3 dB width of the main lobe
+    ``null``        first null of the main lobe (the main lobe spans ``+-null``)
+    ``psl_db``      peak sidelobe level relative to the DC response, in dB
+    ``psl_at``      position of the peak sidelobe, in bins
+    """
+    w = window(name, L, periodic=True)
+    W = np.abs(np.fft.fft(w, L * pad))
+    W = W / W[0]
+    f = np.fft.fftfreq(L * pad, d=1.0 / L)
+    pos = np.where((f >= 0) & (f <= 16))[0]
+    m, ff = W[pos], f[pos]
+    half = 10.0 ** (-3.0 / 20.0)
+    i3 = int(np.argmax(m < half))
+    bw3 = 2.0 * (ff[i3 - 1] + (ff[i3] - ff[i3 - 1]) * (half - m[i3 - 1]) / (m[i3] - m[i3 - 1]))
+    dm = np.diff(m)
+    minima = np.where((dm[:-1] < 0) & (dm[1:] >= 0))[0]
+    null = float(ff[minima[0] + 1])
+    side = np.where((f > null) & (f < L // 2))[0]
+    k = side[int(np.argmax(W[side]))]
+    return {"cg": float(np.mean(w)), "enbw": float(L * np.sum(w**2) / np.sum(w) ** 2), "bw3": float(bw3), "null": null,
+            "psl_db": float(20.0 * np.log10(W[k])), "psl_at": float(f[k])}
+
+
+def kernel_exactness(name: str, L: int = 1024, periodic: bool = True, seed: int = 0) -> float:
+    """Largest relative difference between ``DFT(w x)`` and the kernel convolution ``sum_d W[d] X[k - d]`` (floating point).
+
+    The kernel is that of the *periodic* window (:func:`spectral_kernel`); ``periodic=False`` applies it to the symmetric
+    window of the same name, which shows why the datapath uses the periodic form.  ``x`` is a complex Gaussian vector.
+    """
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal(L) + 1j * rng.standard_normal(L)
+    X = np.fft.fft(x)
+    Xw = np.fft.fft(x * window(name, L, periodic=periodic))
+    Y = apply_window_freq(X, spectral_kernel(name))
+    return float(np.max(np.abs(Y - Xw)) / np.max(np.abs(Xw)))
