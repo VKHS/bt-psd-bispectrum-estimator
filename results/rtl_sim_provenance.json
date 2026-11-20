@@ -1,0 +1,27 @@
+{
+  "what": "Measurements of the RTL simulation (Icarus Verilog) of the self-checking testbenches in tb/; nothing here comes from the Python models",
+  "repository": "VKHS/bt-psd-bispectrum-estimator",
+  "workflow": "ci / job rtl-sim (make -C sim -k all)",
+  "run_id": 44802810365,
+  "run_url": "https://github.com/VKHS/bt-psd-bispectrum-estimator/actions/runs/44802810365",
+  "commit": "b80d74ed01aedd0b72e399172e3b629c9d53b4cf",
+  "run_created_utc": "2026-11-20T19:30:49Z",
+  "simulator": "Icarus Verilog, apt package of the ubuntu-latest runner (version not printed in the log)",
+  "testbenches_passed": [
+    "tb_bispectrum_top",
+    "tb_cru_rotate",
+    "tb_fft512_mem",
+    "tb_mag_sq_odd",
+    "tb_psd_top",
+    "tb_r8_butterfly"
+  ],
+  "fft512_first_issue_to_done_cycles": [
+    207
+  ],
+  "files": {
+    "rtl_trace_fft512.csv": "tb_fft512_mem, chunk 0: signals sampled at the rising edge, cycle 0 = start high",
+    "rtl_trace_squarer.csv": "tb_mag_sq_odd, directed examples (3, -5), (0, 0), (-4, 2): cycle 0 = start high",
+    "rtl_state_occupancy.csv": "tb_psd_top (WL = 12, 4 chunks, 3 segments, one clear) and tb_bispectrum_top (WL = 12, 5 frames, one clear), cycles per state from reset release to the last result",
+    "rtl_squarer_wait_hist.csv": "tb_psd_top, bins by floor(log2(cycles in W_S)) per visit"
+  }
+}

@@ -11,9 +11,9 @@ import re
 from matplotlib.patches import FancyBboxPatch, Rectangle
 
 from _common import FIGS
-from btpsd.rtlmodel import LAT, LAT_BFLY, LAT_CRU, stall_cycles
-from btpsd.rtlparse import RTL_DIR, fsm_edges, parse_all
-from btpsd.viz import INK, INK2, KIND, MUTED, PAL, SURF, Diagram, tint
+from btpsd.rtlmodel import LAT, LAT_BFLY, LAT_CRU, stall_cycles, write_back_slack
+from btpsd.rtlparse import RTL_DIR, fsm_edges, parse_all, reg_widths
+from btpsd.viz import GRID, INK, INK2, KIND, MUTED, PAL, SURF, Diagram, tint
 
 LEGEND = [("io", "top level / interface"), ("control", "control / delay"), ("compute", "arithmetic"),
           ("memory", "memory"), ("rom", "generated ROM"), ("accum", "accumulation")]
@@ -439,7 +439,7 @@ def fig17_engine_fsms():
     lane = X[0] - 3.0
     A, B = F.nodes["S_END"], F.nodes["S_IDLE"]
     F.edge("S_END", "S_IDLE", [A.l, (lane, A.l[1]), (lane, B.l[1]), B.l], None, dashed=True)
-    D.text(lane - 0.2, (A.l[1] + B.l[1]) / 2, "done pulse", fs=5.2, rot=90, color=INK)
+    D.text(lane + 1.5, (A.l[1] + B.l[1]) / 2, "done pulse", fs=5.2, rot=90, color=INK)
     F.right("S_IDLE", "M_A", "go", loff=(0, 1.1))
     # merge row
     F.right("M_A", "M_B")
@@ -495,7 +495,7 @@ def fig17_engine_fsms():
     G.down("S_CLR", "S_END", "all bins", loff=(1.2, 0), ha="left")
     A, B = G.nodes["S_END"], G.nodes["S_IDLE"]
     G.edge("S_END", "S_IDLE", [A.l, (lane, A.l[1]), (lane, B.l[1]), B.l], None, dashed=True)
-    D.text(lane - 0.2, (A.l[1] + B.l[1]) / 2, "done pulse", fs=5.2, rot=90, color=INK)
+    D.text(lane + 1.5, (A.l[1] + B.l[1]) / 2, "done pulse", fs=5.2, rot=90, color=INK)
     G.right("S_IDLE", "W_A", "go", loff=(0, 1.1))
     G.right("W_A", "W_B")
     G.right("W_B", "W_C")
@@ -530,7 +530,155 @@ def fig17_engine_fsms():
     D.save(FIGS / "fig17_fsm_engines")
 
 
-FIGURES = [fig15_hierarchy, fig16_top_fsms, fig17_engine_fsms]
+# ---------------------------------------------------------------------------------------------------------------
+# fig18: pipeline timing
+# ---------------------------------------------------------------------------------------------------------------
+def gantt_bar(D, x, y, w, h, kind, rows, fs=4.6, hatch=False, lw=0.8):
+    """One operation bar of a timing chart; ``rows`` are the text lines inside."""
+    edge, band, _ = _colors(kind)
+    D.ax.add_patch(Rectangle((x, y), w, h, fc="#ffffff" if hatch else band, ec=edge, lw=lw, hatch="////" if hatch else None,
+                             zorder=3))
+    n = len(rows)
+    step = fs * 0.184
+    for i, t in enumerate(rows):
+        yy = y + h / 2 + ((n - 1) / 2 - i) * step
+        D.ax.text(x + w / 2, yy, t, fontsize=fs, color=INK, ha="center", va="center", zorder=4,
+                  bbox=dict(fc="#ffffff", ec="none", pad=0.6) if hatch else None)
+
+
+def gantt_axis(D, x0, y, n, cw, first=0, fs=5.0, ytop=None, ybot=None):
+    for c in range(n):
+        D.text(x0 + (c + 0.5) * cw, y, str(first + c), fs=fs, color=INK)
+    if ytop is not None:
+        for c in range(n + 1):
+            D.ax.plot([x0 + c * cw] * 2, [ybot, ytop], color=GRID, lw=0.45, zorder=1)
+
+
+def reg_line(D, x, ytop, ybot, label, dy=1.8, fs=4.8):
+    D.ax.plot([x, x], [ybot, ytop], color=INK2, lw=0.6, ls=(0, (3, 2)), zorder=2.5)
+    if label:
+        D.text(x, ytop + dy, label, fs=fs, color=INK)
+
+
+def fig18_pipeline_timing():
+    w = reg_widths(RTL_DIR / "cru_rotate.v", {"WL": 16})
+    stage_regs = [("R1", "x, a, b, inv, quad, dir", ["x1r", "x1i", "a1", "b1", "inv1", "quad1", "ccw1"]),
+                  ("R2", "y, inv, quad", ["y2r", "y2i", "inv2", "quad2"]),
+                  ("R3", "z, quad", ["z3r", "z3i", "quad3"]),
+                  ("R4", "yr, yi (output)", ["y4r", "y4i"])]
+    assert len(stage_regs) == LAT_CRU
+    LC, LB = LAT_CRU, LAT_BFLY
+    D = Diagram(150, 189, "Pipeline timing: rotator, butterfly and write-back loop",
+                subtitle="Cycle-level view read from the register stages of the Verilog; the slack of the write-back is computed from the issue schedule.")
+
+    # ---- (a) cru_rotate ---------------------------------------------------------------------------------------------
+    _panel_card(D, 2, 128, 146, 52, "(a)", f"cru_rotate: {LC} register stages, one rotation per cycle",
+                "x and q are presented in cycle t, yr and yi are valid in cycle t + 4; the combinational octant reduction and ROM lookup belong to the first stage")
+    x0, cw, n = 40.0, 9.0, 8
+    stages = [("rom", ["octant,", "ROM"]), ("compute", ["rotate", "(a, b)"]), ("compute", ["gain x inv", "round, >> 14"]),
+              ("compute", ["quadrant,", "saturate"])]
+    ytop_a, ybot_a = 166.4, 140.6
+    gantt_axis(D, x0, 167.6, n, cw, ytop=ytop_a, ybot=ybot_a)
+    D.text(x0 - 2.0, 167.6, "cycle", fs=5.0, ha="right", color=INK2)
+    for i in range(4):
+        yb = 159.4 - 6.2 * i
+        D.text(x0 - 2.0, yb + 2.6, "input n" + ("" if i == 0 else f" + {i}"), fs=5.4, ha="right", color=INK)
+        for st, (kind, rows) in enumerate(stages):
+            gantt_bar(D, x0 + (i + st) * cw + 0.3, yb, cw - 0.6, 5.2, kind, rows)
+        xf = x0 + (i + LC) * cw + 0.3
+        D.ax.add_patch(FancyBboxPatch((xf, yb), cw - 0.6, 5.2, boxstyle="round,pad=0,rounding_size=0.8", fc="none", ec=INK2,
+                                      lw=0.7, ls=(0, (3, 2)), zorder=3))
+        D.text(xf + (cw - 0.6) / 2, yb + 2.6, "y valid", fs=4.6, color=INK)
+    for k, (name, _, _) in enumerate(stage_regs, start=1):
+        reg_line(D, x0 + k * cw, ytop_a, ybot_a, name)
+    yb = 136.6
+    D.ax.plot([x0, x0 + LC * cw], [yb, yb], color=INK, lw=0.9)
+    for xx in (x0, x0 + LC * cw):
+        D.ax.plot([xx, xx], [yb - 0.8, yb + 0.8], color=INK, lw=0.9)
+    D.text(x0 + LC * cw / 2, yb - 2.1, f"LAT_CRU = {LC}", fs=5.8, color=INK, bold=True)
+    D.text(x0, 131.0, "inputs n .. n + 3 overlap: one result per cycle from cycle 4 on; the quadrant step swaps and negates, it needs no multiplier", fs=5.2, ha="left")
+    # register table
+    D.text(116.0, 166.4, "register stage", fs=5.2, ha="left", color=INK, bold=True)
+    D.text(145.0, 166.4, "bits", fs=5.2, ha="right", color=INK, bold=True)
+    for k, (name, what, regs) in enumerate(stage_regs):
+        yy = 163.4 - 3.0 * k
+        D.text(116.0, yy, f"{name}  {what}", fs=4.9, ha="left", color=INK2)
+        D.text(145.0, yy, str(sum(w[r] for r in regs)), fs=5.2, ha="right", color=INK)
+    D.text(116.0, 150.6, "WL = 16; widths read from", fs=4.7, ha="left")
+    D.text(116.0, 148.4, "the reg declarations of cru_rotate.v", fs=4.7, ha="left")
+
+    # ---- (b) r8_butterfly ----------------------------------------------------------------------------------------------
+    _panel_card(D, 2, 62, 146, 64, "(b)", f"r8_butterfly: LAT_BFLY = {LB} cycles, one butterfly per cycle",
+                f"stage 1, a bank of rotators, one register stage for the two remaining add/sub stages, a second bank of rotators (1 + {LC} + 1 + {LC} = {LB})")
+    x0, cw, n = 52.0, 7.8, 12
+    ytop_b, ybot_b = 113.0, 70.6
+    gantt_axis(D, x0, 113.8, n, cw, ytop=ytop_b + 0.4, ybot=ybot_b)
+    D.text(x0 - 2.0, 113.8, "cycle", fs=5.0, ha="right", color=INK2)
+    lanes = ["stage 1: distance-4 half add/sub", "W8^i rotators, 3 x cru_rotate", f"delay line of s and d0, {LC} stages",
+             "stages 2 + 3: distance-2 and -1", "twiddle rotators, 7 x cru_rotate", f"delay line of y0, {LC} stages",
+             f"delay line of tq, {LC + 2} stages"]
+    ys = [107.8 - 6.2 * j for j in range(len(lanes))]
+    for lab, yb in zip(lanes, ys):
+        D.text(5.0, yb + 2.4, lab, fs=5.3, ha="left", color=INK)
+    hb = 4.8
+    gantt_bar(D, x0 + 0.3, ys[0], cw - 0.6, hb, "compute", ["hadd,", "hsub"])
+    for bank, c0 in ((1, 1), (4, 6)):
+        for st, (kind, _) in enumerate(stages):
+            gantt_bar(D, x0 + (c0 + st) * cw + 0.3, ys[bank], cw - 0.6, hb, kind, [("ROM", "rot", "gain", "quad")[st]])
+    gantt_bar(D, x0 + 1 * cw + 0.3, ys[2], LC * cw - 0.6, hb, "control", [f"{LC} cycles"], hatch=True)
+    gantt_bar(D, x0 + 5 * cw + 0.3, ys[3], cw - 0.6, hb, "compute", ["2 + 1", "stages"])
+    gantt_bar(D, x0 + 6 * cw + 0.3, ys[5], LC * cw - 0.6, hb, "control", [f"{LC} cycles"], hatch=True)
+    gantt_bar(D, x0 + 0 * cw + 0.3, ys[6], (LC + 2) * cw - 0.6, hb, "control", [f"{LC + 2} cycles, tq arrives with y3"], hatch=True)
+    for k, lab in ((1, "s1, d1"), (6, "y3"), (LB, "y valid")):
+        reg_line(D, x0 + k * cw, ytop_b, ybot_b - 0.4, lab, dy=2.6)
+    D.ax.plot([x0 + LB * cw] * 2, [ybot_b - 0.4, ytop_b], color=INK, lw=1.0, zorder=2.6)
+    D.text(x0, 66.0, f"y[0] leaves through the delay line, y[1] .. y[7] through the twiddle rotators with q = tq[k]; the words of the next "
+           f"butterfly follow one cycle behind", fs=5.2, ha="left")
+
+    # ---- (c) write-back hazard ----------------------------------------------------------------------------------------
+    stall = stall_cycles(LAT)
+    _panel_card(D, 2, 2, 146, 58, "(c)", f"fft512_mem: why the issue controller stalls {stall} cycles after pass 0",
+                f"a butterfly issued in slot t reads the banks, is written in slot t + {LB + 1} and its rows can be read again in slot t + {LAT} = t + LAT")
+    s0, ns, cw, x0 = 56, 21, 3.5, 22.0
+    gantt_axis(D, x0, 49.4, ns, cw, first=s0, fs=4.0, ytop=47.2, ybot=20.6)
+    D.text(x0 - 1.0, 49.4, "slot", fs=5.0, ha="right", color=INK2)
+    ya, yb_, yc, yd, hh = 42.0, 36.0, 30.0, 21.4, 4.4
+    for lab, yy in (("pass 0", ya), ("stall", yb_), ("pass 1", yc), ("pass 0, b = 56", yd)):
+        D.text(x0 - 1.0, yy + hh / 2, lab, fs=5.2, ha="right", color=INK)
+    for b in range(56, 64):
+        gantt_bar(D, x0 + (b - s0) * cw + 0.2, ya, cw - 0.4, hh, "memory", [str(b)], fs=4.0)
+    gantt_bar(D, x0 + (64 - s0) * cw + 0.2, yb_, stall * cw - 0.4, hh, "control", [f"stall {stall}"], hatch=True, fs=4.6)
+    for b in range(0, 9):
+        gantt_bar(D, x0 + (64 + stall + b - s0) * cw + 0.2, yc, cw - 0.4, hh, "memory", [str(b)], fs=4.0)
+    t = 56 - s0
+    gantt_bar(D, x0 + t * cw + 0.2, yd, cw - 0.4, hh, "memory", ["rd"], fs=3.8)
+    gantt_bar(D, x0 + (t + 1) * cw + 0.2, yd, LB * cw - 0.4, hh, "compute", [f"r8_butterfly, {LB} cycles"], fs=4.8)
+    gantt_bar(D, x0 + (t + 1 + LB) * cw + 0.2, yd, cw - 0.4, hh, "accum", ["wr"], fs=3.8)
+    xr = x0 + (t + LAT) * cw
+    D.arrow([(xr + 0.2, yd + hh), (xr + 0.2, yc)], None, ls="--")
+    D.arrow([(x0 + t * cw + cw / 2, ya), (x0 + t * cw + cw / 2, yd + hh)], None, ls=":")
+    D.text(xr + 2.0, yd - 2.2, f"readable from slot 56 + LAT = {56 + LAT}", fs=5.0, ha="left", color=INK)
+    D.text(x0, 14.4, f"Pass-1 butterfly (hi, lo) needs the words written by pass-0 butterflies lo, lo + 8, ..., lo + 56. For butterflies 0 .. 7", fs=5.0, ha="left")
+    D.text(x0, 12.0, f"the last producer is butterfly 56 + lo: issue slot {64 + stall} + lo is exactly the first slot in which the word can be read.", fs=5.0, ha="left")
+    D.text(x0, 9.6, f"Without the stall the first butterfly of pass 1 would read its last row {stall} cycles before it is written; "
+           f"no further stall is needed.", fs=5.0, ha="left")
+    slack = write_back_slack()
+    ax = D.inset(110.0, 9.0, 34.0, 32.0, title="slack of the write-back (cycles)", fs=4.6)
+    b = range(64)
+    ax.step(b, slack[1], where="mid", color=PAL["blue"], lw=0.9, label="pass 1")
+    ax.step(b, slack[2], where="mid", color=PAL["aqua"], lw=0.9, label="pass 2")
+    ax.set_xlim(0, 63)
+    ax.set_ylim(-4, 62)
+    ax.set_xticks([0, 16, 32, 48, 63])
+    ax.set_yticks([0, 20, 40, 60])
+    ax.set_xlabel("butterfly b", fontsize=4.8, labelpad=1.0)
+    ax.axhline(0, color=PAL["red"], lw=0.6, ls="--")
+    ax.text(62, 2.2, "hazard below", ha="right", va="bottom", fontsize=4.2, color=PAL["red"])
+    ax.legend(fontsize=4.4, frameon=False, loc="center left", borderpad=0.2, handlelength=1.2)
+    D.save(FIGS / "fig18_pipeline_timing")
+
+
+FIGURES = [fig15_hierarchy, fig16_top_fsms, fig17_engine_fsms, fig18_pipeline_timing]
 
 
 def main():

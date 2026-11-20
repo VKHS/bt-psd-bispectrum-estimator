@@ -20,9 +20,11 @@ from .cordic import default_rom, rotate_fixed
 from .estimator import HwConfig
 from .fixedpoint import rshift, saturate
 from .r8fft import dft8_fixed
+from .squarer import mag_sq
 
 __all__ = ["LAT_CRU", "LAT_BFLY", "LAT", "stall_cycles", "row_fn", "twq", "Fft512Rtl", "psd_segment_loops",
-           "bispectrum_frame_loops", "PSD_STATES", "BSP_STATES", "psd_engine_state_cycles", "bispectrum_engine_state_cycles"]
+           "bispectrum_frame_loops", "PSD_STATES", "BSP_STATES", "psd_engine_state_cycles", "bispectrum_engine_state_cycles",
+           "write_back_slack", "squarer_wait_histogram"]
 
 LAT_CRU = 4  # register stages of rtl/cru_rotate.v
 LAT_BFLY = 1 + LAT_CRU + 1 + LAT_CRU  # rtl/r8_butterfly.v
@@ -227,3 +229,34 @@ def bispectrum_engine_state_cycles(frames: int, logb: int, clears: int = 1) -> d
         "T_A": maxb * maxb * frames, "T_B": maxb * maxb * frames, "T_C": maxb * maxb * frames, "T_D": maxb * maxb * frames,
         "S_END": clears + frames,
     }
+
+
+def write_back_slack(stall: int | None = None, lat: int = LAT) -> dict[int, np.ndarray]:
+    """Slack in cycles of the 64 butterflies of pass 1 and pass 2 against the write-back of the previous pass.
+
+    The slack of a butterfly is its issue slot minus the first slot in which its last input word can be read, i.e. the
+    issue slot of the producing butterfly of the previous pass plus ``lat``.  A negative value is a read-after-write
+    hazard.  With the stall of the RTL the smallest slack is 0 (pass 1, butterflies 0 .. 7); one stall cycle less gives -1.
+    """
+    from .schedule import pass_addresses
+
+    stall = stall_cycles(lat) if stall is None else stall
+    slot = {(p, b): t for t, p, b in Fft512Rtl().issue_schedule(stall)}
+    out: dict[int, np.ndarray] = {}
+    for p in (1, 2):
+        producer = {int(a): b2 for b2, adr in enumerate(pass_addresses(p - 1)) for a in adr}
+        readable = [max(slot[(p - 1, producer[int(a)])] + lat for a in pass_addresses(p)[b]) for b in range(64)]
+        out[p] = np.array([slot[(p, b)] - readable[b] for b in range(64)])
+    return out
+
+
+def squarer_wait_histogram(Wr, Wi, units: int = 2) -> dict[int, int]:
+    """Histogram of the ``W_S`` residence of ``psd_engine``: one visit per bin, ``n + 3`` cycles (serial squarer).
+
+    ``n`` is the squarer time of the bin (:func:`btpsd.squarer.mag_sq`, ``max(|re|, |im|)`` for two units).  The keys are
+    ``floor(log2(residence))``, the binning of ``results/rtl_squarer_wait_hist.csv`` (written by the testbench).
+    """
+    _, cyc = mag_sq(np.asarray(Wr), np.asarray(Wi), units)
+    resid = np.asarray(cyc, dtype=np.int64).ravel() + 3
+    k = np.floor(np.log2(resid)).astype(int)
+    return {int(b): int((k == b).sum()) for b in np.unique(k)}

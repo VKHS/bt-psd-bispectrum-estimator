@@ -101,3 +101,15 @@ def test_bispectrum_engine_loops_match_bispectrum_fixed():
         acci += ti
     np.testing.assert_array_equal(rshift(accr, v["avg_shift"], cfg.rounding), v["B_re"])
     np.testing.assert_array_equal(rshift(acci, v["avg_shift"], cfg.rounding), v["B_im"])
+
+
+def test_write_back_slack_needs_exactly_the_rtl_stall():
+    from btpsd.rtlmodel import LAT, stall_cycles, write_back_slack
+
+    stall = stall_cycles(LAT)
+    slack = write_back_slack()
+    assert min(slack[1]) == 0 and min(slack[2]) > 0
+    assert list(slack[1][:8]) == [0] * 8                      # butterflies 0..7 of pass 1 issue exactly when readable
+    assert list(slack[1][8:16]) == [8] * 8                    # slack grows by 8 per group of eight (hi = b >> 3)
+    assert write_back_slack(stall - 1)[1].min() == -1         # one stall cycle less is a hazard
+    assert min(write_back_slack(stall + 1)[1]) == 1           # one more is wasted
