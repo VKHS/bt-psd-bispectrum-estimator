@@ -132,6 +132,8 @@ Each item was checked on the printed page. They are candidates for the authors t
 | 10 | Table 6 | 128 rows with a label `k pi/512` and a coefficient pair `(a, b)` | in 27 of 128 rows the angle of `(a, b)` differs from the label by more than the stated 0.01 rad (1.63 steps of pi/512), up to 33 steps (row 8: label pi/64 with (20, 5)); `data/table6_printed.csv` lists the rows and `paperdata.table6_printed()` flags them. The ROM of this repository does not use Table 6 |
 | 11 | Table 2, row R113 | first entry 340, later entry 1361 | the neighbours follow `8 i - 504` (R112: 392, R114: 408) and +32 steps (1505, 1633), which gives 400 and 1601 |
 | 12 | Table 8 | columns "Unrolled C." and "Single C." | no values under either heading; the caption lists the window order Rectangular, Hamming, Hann, Blackman, which matches the row order |
+| 13 | Section 2 (page 3) against Fig. 3 | the text calls the barrel shifter fifteen-bit three times; Fig. 3 labels it "8-bit Barrel Shifter (For choosing Ms)" inside a 15-bit main counter made of a 7-bit pass counter and an 8-bit butterfly counter | one width; the counter split 7 + 8 = 15 is consistent, the shifter width is not |
+| 14 | Section 2 (page 3) | "Eight memory-banks in eight clock cycles receive sixty-eight samples and send sixty-eight samples. This is also shown in Tables 2 and 3." | 8 banks x 8 cycles = 64 words; the register-sequence tables are Tables 1 and 2 (Table 3 is the SNR of the fractional-delay taps) |
 
 Item 3 changes nothing in the results; items 1, 4-7 matter if the equations are used as implementation references.
 

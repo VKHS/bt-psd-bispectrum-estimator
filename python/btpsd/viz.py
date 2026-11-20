@@ -56,11 +56,12 @@ def style_axes(ax, grid=True):
 def savefig(fig, path_stem: Path, dpi: int = 200):
     path_stem = Path(path_stem)
     path_stem.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path_stem.with_suffix(".svg"), facecolor=SURF)
+    fig.savefig(path_stem.with_suffix(".svg"), facecolor=SURF, metadata={"Date": None})
     fig.savefig(path_stem.with_suffix(".png"), dpi=dpi, facecolor=SURF)
     plt.close(fig)
 
 
+plt.rcParams["svg.hashsalt"] = "bt-psd-bispectrum-estimator"  # reproducible ids: regenerating a figure changes the SVG only if the figure changed
 UNIT = 0.086  # inches per drawing unit
 
 

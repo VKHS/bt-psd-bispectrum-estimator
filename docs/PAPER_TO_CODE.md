@@ -48,7 +48,7 @@ lives in this repository. Columns: **Model** = `python/btpsd`, **RTL** = `rtl/` 
 
 | Table | Content | Where |
 |---:|---|---|
-| 1, 2 | register-file address sequences | `data/paper_table1_*`, `data/paper_table2_*`; erratum 11 (Table 2, R113) |
+| 1, 2 | register-file address sequences | `data/paper_table1_*`, `data/paper_table2_*`; erratum 11 (Table 2, R113), errata 13, 14 (text of Section 2) |
 | 3 | SNR versus FD taps | `data/paper_table3_*`; compared with the model in `results/fd_merge_snr_vs_taps.csv` (not reproduced, `PAPER_NOTES.md` section 2.3) |
 | 4 | window significant taps | `data/paper_table4_*`; `windows.py` (kernels with 1, 3 and 5 taps) |
 | 5 | dyadic micro-rotations | `data/paper_table5_*`; errata 2, 3 |
