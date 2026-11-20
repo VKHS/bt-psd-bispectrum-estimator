@@ -25,6 +25,13 @@ module tb_bispectrum_top;
         .in_valid(in_valid), .in_data(in_data), .in_ready(in_ready), .busy(busy),
         .res_idx(res_idx), .res_re(res_re), .res_im(res_im));
 
+    // cycles spent in the FFT phase (B_FFT = 4) and in the bispectrum engine (B_ENG = 5) of the top level
+    integer c_fft = 0, c_eng = 0;
+    always @(posedge clk) if (rst_n) begin
+        if (dut.st == 3'd4) c_fft = c_fft + 1;
+        if (dut.st == 3'd5) c_eng = c_eng + 1;
+    end
+
     integer i, errs;
     initial begin
         if (`BSP_MAX_BIN != MAXB) begin
@@ -50,6 +57,8 @@ module tb_bispectrum_top;
         repeat (2) @(negedge clk);
         while (!in_ready) @(negedge clk);
         $display("all %0d frames processed at t = %0d ns", `BSP_S, $time);
+        $display("B_FFT %0d cycles and B_ENG %0d cycles for %0d frames (%0d and %0d per frame)",
+                 c_fft, c_eng, `BSP_S, c_fft / `BSP_S, c_eng / `BSP_S);
         for (i = 0; i < MAXB*MAXB + 1; i = i + 1) begin
             @(negedge clk);
             if (i >= 1) begin

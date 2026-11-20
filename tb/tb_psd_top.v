@@ -24,6 +24,13 @@ module tb_psd_top;
         .in_valid(in_valid), .in_data(in_data), .in_ready(in_ready), .busy(busy),
         .res_addr(res_addr), .res_data(res_data));
 
+    // cycles spent in the FFT phase (T_FFT = 3) and in the segment phase of the engine (T_SEG = 4) of the top level
+    integer c_fft = 0, c_seg = 0;
+    always @(posedge clk) if (rst_n) begin
+        if (dut.st == 3'd3) c_fft = c_fft + 1;
+        if (dut.st == 3'd4) c_seg = c_seg + 1;
+    end
+
     integer i, errs, cyc0, cyc;
     initial begin
         $readmemh("sim/vectors/psd_wl12_x.mem", xmem);
@@ -45,6 +52,8 @@ module tb_psd_top;
         repeat (2) @(negedge clk);
         while (!in_ready) @(negedge clk);
         $display("all %0d segments processed at t = %0d ns", `PSD_S, $time);
+        $display("T_FFT %0d cycles for %0d chunks, T_SEG %0d cycles for %0d segments (serial squarer: %0d squarer cycles in the model)",
+                 c_fft, `PSD_NCHUNKS, c_seg, `PSD_S, `PSD_SQUARER_CYCLES);
         for (i = 0; i < 1025; i = i + 1) begin
             @(negedge clk);
             if (i >= 1) begin

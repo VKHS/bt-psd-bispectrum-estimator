@@ -13,7 +13,7 @@ All files are `$readmemh` text, one word per line, lower-case hex, two's complem
 | `sq_wl16_in.mem` / `sq_wl16_out.mem` | in `{re[16], im[16]}`, out `re^2 + im^2` (32 bit) | `tb/tb_mag_sq_odd.v` |
 | `psd_wl12_x.mem` | 4 chunks x 512 real sample codes (12 bit): chunks 0-1 pink noise at half scale, chunks 2-3 a hard-clipped full-scale tone (saturating paths) | `tb/tb_psd_top.v` |
 | `psd_wl12_P.mem` | 1024 words, accumulated and shifted power `P_int` | `tb/tb_psd_top.v` |
-| `psd_wl12.vh` | Verilog macros: segments `S`, `AVG_SHIFT` | `tb/tb_psd_top.v` |
+| `psd_wl12.vh` | Verilog macros: segments `S`, `AVG_SHIFT`, chunks, squarer cycles of the model | `tb/tb_psd_top.v` |
 | `bsp_wl12_x.mem` | real sample codes (12 bit), hop 256: the first 768 samples at 0.6 of the peak, the rest amplified and hard-clipped to full scale | `tb/tb_bispectrum_top.v` |
 | `bsp_wl12_B_re.mem`, `bsp_wl12_B_im.mem` | `max_bin^2` words row-major `[f1][f2]`, `2*wl+10` bits (34 for wl = 12) | `tb/tb_bispectrum_top.v` |
 | `bsp_wl12.vh` | Verilog macros: frames `S`, `AVG_SHIFT`, `MAX_BIN` | `tb/tb_bispectrum_top.v` |

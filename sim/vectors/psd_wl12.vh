@@ -2,3 +2,4 @@
 `define PSD_S 3
 `define PSD_AVG_SHIFT 2
 `define PSD_NCHUNKS 4
+`define PSD_SQUARER_CYCLES 21757
