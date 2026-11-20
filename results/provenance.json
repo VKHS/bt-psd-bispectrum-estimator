@@ -1,0 +1,18 @@
+{
+  "generated_by": "python/scripts/run_experiments.py",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "python": "3.13.18",
+  "record_length_samples": 20480,
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "signals": "synthetic (btpsd.signals); not the paper's data",
+  "sqnr_definition": "10*log10(sum(P_ref^2)/sum((P_ref-P_hw)^2)), linear power domain, analytic scale",
+  "note": "These numbers are model results on synthetic signals. Paper-reported values are in data/paper_*.csv.",
+  "runtime_s": 24.3
+}

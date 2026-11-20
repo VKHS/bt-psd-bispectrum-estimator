@@ -1,0 +1,16 @@
+signal,wl,snr_complex_db,sqnr_magnitude_db
+qpc_coupled,10,22.447,22.749
+qpc_coupled,12,34.194,34.581
+qpc_coupled,14,42.436,43.104
+qpc_coupled,16,50.627,52.176
+qpc_coupled,18,56.617,59.588
+qpc_uncoupled,10,13.067,16.491
+qpc_uncoupled,12,26.009,29.352
+qpc_uncoupled,14,33.718,36.602
+qpc_uncoupled,16,39.611,42.162
+qpc_uncoupled,18,48.574,51.564
+pink,10,21.554,22.384
+pink,12,33.316,34.454
+pink,14,44.937,46.978
+pink,16,55.078,56.721
+pink,18,66.102,67.306
