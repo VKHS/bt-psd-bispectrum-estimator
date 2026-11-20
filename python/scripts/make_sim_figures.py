@@ -346,7 +346,7 @@ def fig23_rtl_config_matrix(src=RESULTS, out=None):
     notes = [
         "'clamps': rounded butterfly differences that the model clamps in the vectors; the clamp exists only with rounding, so the "
         "truncating runs show 0.",
-        "The vectors end in full-scale, hard-clipped segments, so saturating paths are part of every comparison.",
+        "The vectors end in full-scale, hard-clipped segments; with rounding they reach the butterfly clamp in every run.",
         "The expected values come from the model: this checks the RTL against the model, not the model against the paper.",
         "Not covered: the empty cells, other simulators, gate level, synthesis, timing, power. The block testbenches (rotator, "
         "butterfly, squarer, FFT core) run at WL = 16 only.",
