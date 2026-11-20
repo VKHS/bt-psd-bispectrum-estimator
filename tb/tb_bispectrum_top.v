@@ -1,11 +1,32 @@
 // Self-checking testbench of the direct bispectrum estimator against btpsd.bispectrum.bispectrum_fixed
-// (WL = 12, Hann window, 5 frames with hop 256, 32 x 32 bins).
+// (default: WL = 12, Hann window, 5 frames with hop 256, 32 x 32 bins).
 // Run from the repository root:  make -C sim bsp
+//
+// Other configurations are run by python/scripts/run_rtl_matrix.py (see tb_psd_top.v): TB_VH names the generated include
+// file with the BSP_* counts, which may define TB_WL, TB_PARAMS, TB_XFILE, TB_REFILE and TB_IMFILE.
 `timescale 1ns / 1ps
-`include "bsp_wl12.vh"
+`ifndef TB_VH
+`define TB_VH "bsp_wl12.vh"
+`endif
+`include `TB_VH
+`ifndef TB_WL
+`define TB_WL 12
+`endif
+`ifndef TB_PARAMS
+`define TB_PARAMS .WL(`TB_WL), .ROUND(1), .LOGB(5)
+`endif
+`ifndef TB_XFILE
+`define TB_XFILE "sim/vectors/bsp_wl12_x.mem"
+`endif
+`ifndef TB_REFILE
+`define TB_REFILE "sim/vectors/bsp_wl12_B_re.mem"
+`endif
+`ifndef TB_IMFILE
+`define TB_IMFILE "sim/vectors/bsp_wl12_B_im.mem"
+`endif
 
 module tb_bispectrum_top;
-    localparam WL = 12, LOGB = 5, MAXB = 1 << LOGB, BACCW = 2 * WL + 10, NS = `BSP_NSAMPLES;
+    localparam WL = `TB_WL, LOGB = 5, MAXB = 1 << LOGB, BACCW = 2 * WL + 10, NS = `BSP_NSAMPLES;
 
     reg clk = 1'b0, rst_n = 1'b0;
     always #5 clk = ~clk;
@@ -20,7 +41,7 @@ module tb_bispectrum_top;
     reg  [2*LOGB-1:0]     res_idx;
     wire signed [BACCW-1:0] res_re, res_im;
 
-    bt_bispectrum_top #(.WL(WL), .ROUND(1), .LOGB(LOGB)) dut (
+    bt_bispectrum_top #(`TB_PARAMS) dut (
         .clk(clk), .rst_n(rst_n), .avg_shift(`BSP_AVG_SHIFT),
         .in_valid(in_valid), .in_data(in_data), .in_ready(in_ready), .busy(busy),
         .res_idx(res_idx), .res_re(res_re), .res_im(res_im));
@@ -52,9 +73,9 @@ module tb_bispectrum_top;
             $display("TB_RESULT: FAIL tb_bispectrum_top (vectors are for MAX_BIN = %0d, testbench for %0d)", `BSP_MAX_BIN, MAXB);
             $finish;
         end
-        $readmemh("sim/vectors/bsp_wl12_x.mem", xmem);
-        $readmemh("sim/vectors/bsp_wl12_B_re.mem", bre);
-        $readmemh("sim/vectors/bsp_wl12_B_im.mem", bim);
+        $readmemh(`TB_XFILE, xmem);
+        $readmemh(`TB_REFILE, bre);
+        $readmemh(`TB_IMFILE, bim);
         errs = 0;  in_valid = 1'b0;  in_data = 0;  res_idx = 0;
         repeat (3) @(negedge clk);
         rst_n = 1'b1;

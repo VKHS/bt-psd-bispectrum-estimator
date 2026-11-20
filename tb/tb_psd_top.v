@@ -1,11 +1,31 @@
 // Self-checking testbench of the whole PSD estimator against btpsd.estimator.psd_fixed
-// (WL = 12, Hann window, 4 chunks = 3 segments, serial sum-of-odds squarer).
+// (default: WL = 12, Hann window, 4 chunks = 3 segments, serial sum-of-odds squarer).
 // Run from the repository root:  make -C sim psd
+//
+// Other configurations (word length, window, ROUND, squarer) are run by python/scripts/run_rtl_matrix.py: it generates
+// vectors and an include file for the configuration and defines TB_VH (the include file) on the iverilog command line.
+// The include file holds the PSD_* counts of the vectors and may define TB_WL, TB_PARAMS (the parameter overrides of
+// the DUT), TB_XFILE and TB_PFILE; whatever it leaves undefined keeps the default below.
 `timescale 1ns / 1ps
-`include "psd_wl12.vh"
+`ifndef TB_VH
+`define TB_VH "psd_wl12.vh"
+`endif
+`include `TB_VH
+`ifndef TB_WL
+`define TB_WL 12
+`endif
+`ifndef TB_PARAMS
+`define TB_PARAMS .WL(`TB_WL), .ROUND(1), .SQ_SERIAL(1)
+`endif
+`ifndef TB_XFILE
+`define TB_XFILE "sim/vectors/psd_wl12_x.mem"
+`endif
+`ifndef TB_PFILE
+`define TB_PFILE "sim/vectors/psd_wl12_P.mem"
+`endif
 
 module tb_psd_top;
-    localparam WL = 12, ACCW = 2 * WL + 8, NS = `PSD_NCHUNKS * 512;
+    localparam WL = `TB_WL, ACCW = 2 * WL + 8, NS = `PSD_NCHUNKS * 512;
 
     reg clk = 1'b0, rst_n = 1'b0;
     always #5 clk = ~clk;
@@ -19,7 +39,7 @@ module tb_psd_top;
     reg  [9:0]           res_addr;
     wire [ACCW-1:0]      res_data;
 
-    bt_psd_top #(.WL(WL), .ROUND(1), .SQ_SERIAL(1)) dut (
+    bt_psd_top #(`TB_PARAMS) dut (
         .clk(clk), .rst_n(rst_n), .avg_shift(`PSD_AVG_SHIFT),
         .in_valid(in_valid), .in_data(in_data), .in_ready(in_ready), .busy(busy),
         .res_addr(res_addr), .res_data(res_data));
@@ -57,8 +77,8 @@ module tb_psd_top;
 
     integer i, errs, cyc0, cyc;
     initial begin
-        $readmemh("sim/vectors/psd_wl12_x.mem", xmem);
-        $readmemh("sim/vectors/psd_wl12_P.mem", pexp);
+        $readmemh(`TB_XFILE, xmem);
+        $readmemh(`TB_PFILE, pexp);
         errs = 0;  in_valid = 1'b0;  in_data = 0;  res_addr = 0;
         repeat (3) @(negedge clk);
         rst_n = 1'b1;

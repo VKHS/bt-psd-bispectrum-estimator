@@ -205,13 +205,13 @@ def clipped_tone(n: int, seed: int, bin_1024: float = 100.5, gain: float = 1.3, 
 
 
 def psd_vectors(wl: int = 12, window: str = "hann", nchunks: int = 4, seed: int = 5, peak: float = 0.5,
-                stress_from: int = 2) -> dict:
+                stress_from: int = 2, rounding: str = "round") -> dict:
     """Input: ``nchunks * 512`` real sample codes; expected: ``P_int`` (1024 words) of :func:`psd_fixed`.
 
     Chunks before ``stress_from`` are pink noise at ``peak``; from there on the input is a hard-clipped full-scale tone
     (:func:`clipped_tone`), so that the saturating paths of the engine are part of the comparison.
     """
-    cfg = HwConfig(wl=wl, window=window)
+    cfg = HwConfig(wl=wl, window=window, rounding=rounding)
     x = sg.pink(nchunks * 512, seed, peak=peak)
     if stress_from < nchunks:
         x[stress_from * 512:] = clipped_tone(nchunks * 512, seed + 100)[stress_from * 512:]
@@ -225,13 +225,13 @@ def psd_vectors(wl: int = 12, window: str = "hann", nchunks: int = 4, seed: int 
 # bispectrum
 # ---------------------------------------------------------------------------
 def bispec_vectors(wl: int = 12, window: str = "hann", nsamples: int = 512 * 3, max_bin: int = 32, seed: int = 6,
-                   stress_from: int = 768) -> dict:
+                   stress_from: int = 768, rounding: str = "round") -> dict:
     """Input sample codes (hop 256, 512-sample frames); expected ``B_re, B_im`` of :func:`bispectrum_fixed`.
 
     The first ``stress_from`` samples are the coupled test signal at 0.6 of its peak; the rest is the same signal
     amplified 2.5 times and hard-clipped to full scale, so that the saturating paths of the engine are exercised.
     """
-    cfg = BispecConfig(wl=wl, window=window, max_bin=max_bin)
+    cfg = BispecConfig(wl=wl, window=window, max_bin=max_bin, rounding=rounding)
     x, _ = sg.qpc(nsamples, coupled=True, seed=seed)
     x = np.asarray(x, dtype=float)
     y = 0.6 * x
