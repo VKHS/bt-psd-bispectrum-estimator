@@ -15,7 +15,7 @@ EMG records are not part of the repository, so *model* and *paper* values are ne
 | 2 | The 6-tap fractional-delay merge limits the odd-bin accuracy to about **11.7 dB**; Table 3 reports 50.08 dB for six taps and the model does not reproduce it | section 2.2, `results/fd_merge_snr_vs_taps.csv` | the PSD SQNR of every word length saturates at a merge limit (23.5 to 44 dB, depending on the signal) |
 | 3 | The SQNR of Table 10 is a single-point value at (f1, f2) = (10, 8); the model reports plane-wide values | section 2.3 | no head-to-head comparison of Table 10 with the model |
 | 4 | The sum-of-odds squarer needs `max(|re|, |im|)` cycles; at WL = 16 one segment needs 25 k to 56 k squarer cycles | section 2.4, `results/squarer_cycle_model.csv` | a serial squarer meets the throughput of Table 9 at WL = 10 but not at WL = 16 |
-| 5 | Twelve candidate errata and omissions in equations and tables | section 3 | listed for the authors' own check against the source files |
+| 5 | Fifteen candidate errata and omissions in equations, tables and figures | section 3 | listed for the authors' own check against the source files |
 
 ## 2. Details
 
@@ -135,7 +135,12 @@ Each item was checked on the printed page. They are candidates for the authors t
 | 13 | Section 2 (page 3) against Fig. 3 | the text calls the barrel shifter fifteen-bit three times; Fig. 3 labels it "8-bit Barrel Shifter (For choosing Ms)" inside a 15-bit main counter made of a 7-bit pass counter and an 8-bit butterfly counter | one width; the counter split 7 + 8 = 15 is consistent, the shifter width is not |
 | 14 | Section 2 (page 3) | "Eight memory-banks in eight clock cycles receive sixty-eight samples and send sixty-eight samples. This is also shown in Tables 2 and 3." | 8 banks x 8 cycles = 64 words; the register-sequence tables are Tables 1 and 2 (Table 3 is the SNR of the fractional-delay taps) |
 
+| 15 | Figs. 12-15 and Table 4 | the panels show 128-point windows whose DFT has 1, 3, 3 and 5 marked bins; the window form (periodic or symmetric) is not stated | the stems of the printed panels are those of the **symmetric** windows: centre stem minus first neighbour is 31.38, 39.14 and 21.34 (Hann, Hamming, Blackman; read from the pixels, `data/paper_figs13_15_stems_read.csv`), the symmetric windows give 31.38, 39.11 and 21.32, the periodic windows 32.00, 39.68 and 21.76. The kernel of Eq. (13) with exactly 3 or 5 taps is exact only for the periodic window; applied to the symmetric window it leaves a relative error of about 2e-3 in the windowed spectrum (`windows.kernel_exactness`). This repository uses the periodic windows (`docs/figures/fig21_window_responses`) |
+
 Item 3 changes nothing in the results; items 1, 4-7 matter if the equations are used as implementation references.
+Item 15 changes nothing in the conclusions: the difference between the two window forms corresponds to an SQNR of about
+54 dB on the windowed spectrum (`btpsd.windows.kernel_exactness`), above the largest end-to-end SQNR of the model, 44.4 dB
+(`results/sqnr_vs_wordlength.csv`).
 
 ## 4. What the paper leaves open (and what this repository chose)
 

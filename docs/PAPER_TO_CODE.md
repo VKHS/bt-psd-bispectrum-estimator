@@ -15,11 +15,11 @@ lives in this repository. Columns: **Model** = `python/btpsd`, **RTL** = `rtl/` 
 | 1 | Introduction, taxonomy of spectral estimation | `reference.py` (references) | | `paperfig01` |
 | 2 | Blackman-Tukey / Welch estimator, 512-point memory-based radix-8 FFT, R8MDC baseline | `r8fft.py`, `schedule.py`, `estimator.py` | `fft512_mem.v`, `r8_butterfly.v` | `fig02`, `fig03`, `fig09`, `fig10`, `paperfig02`, `paperfig03`, Tables 1, 2 |
 | 2 | chunk merge with the fractional-delay filter | `fdfilter.py`, `estimator.py` | `psd_engine.v` | `fig04`, `fig05`, `fig11`, `paperfig04` to `paperfig11`, Table 3 |
-| 2 | frequency-domain windowing | `windows.py`, `estimator.py` | `psd_engine.v` | `fig07`, `paperfig12` to `paperfig15`, Table 4 |
+| 2 | frequency-domain windowing | `windows.py`, `estimator.py` | `psd_engine.v` | `fig07`, `fig21`, `paperfig12` to `paperfig15`, Table 4, `PAPER_NOTES.md` item 15 |
 | 2 | central rotational unit (CRU) | `cordic.py`, `radix2_cordic_fft.py` | `cru_rotate.v`, `cru_rom.v` | `fig06`, `paperfig16`, `paperfig17`, Tables 5, 6 |
 | 2 | squarer and averaging | `squarer.py`, `estimator.py` | `mag_sq_odd.v`, `psd_engine.v` | `fig07` |
 | 2 | bispectrum | `bispectrum.py` | `bispectrum_engine.v`, `bt_bispectrum_top.v` | `fig08`, `fig13`, `fig14` |
-| 3 | experiments: PSD, SQNR, resources, bispectrum | `python/scripts/run_experiments.py` (synthetic signals) | | `fig12`, `fig13`, `fig14`, `results/`, Tables 7 to 10, `paperfig18` to `paperfig32` |
+| 3 | experiments: PSD, SQNR, resources, bispectrum | `python/scripts/run_experiments.py` (synthetic signals) | | `fig12`, `fig13`, `fig14`, `fig22`, `results/`, Tables 7 to 10, `paperfig18` to `paperfig32` |
 | 4 | conclusion | | | |
 
 ## Equations
@@ -61,4 +61,18 @@ lives in this repository. Columns: **Model** = `python/btpsd`, **RTL** = `rtl/` 
 ## Figures
 
 The paper's 32 figures are in `docs/paper_figures/`; the manifest there names, for each figure, the page and the
-counterpart drawn in this repository. The sheets of `docs/figures/` are drawn from the model and the RTL.
+counterpart drawn in this repository. The 22 sheets of `docs/figures/` are drawn from the model, from the Verilog sources
+and from the simulation traces; `docs/figures/README.md` lists them with their scripts and their data basis.
+
+## Beyond the paper: the RTL
+
+The paper describes the architecture; this repository adds a reference implementation. Where each piece is documented and
+checked:
+
+| Topic | RTL | Sheet | Check |
+|---|---|---|---|
+| module hierarchy, interfaces | `rtl/*.v` | `fig15` | `tests/test_rtl_structure.py` (hierarchy parsed from the sources) |
+| control state machines | `bt_psd_top.v`, `bt_bispectrum_top.v`, `fft512_mem.v`, `psd_engine.v`, `bispectrum_engine.v` | `fig16`, `fig17` | `tests/test_rtl_structure.py` (every drawn transition is in the Verilog) |
+| pipeline latencies, issue stall of the FFT core | `cru_rotate.v`, `r8_butterfly.v`, `fft512_mem.v` | `fig18` | `tests/test_rtlmodel.py` (`write_back_slack`: the stall of 4 cycles is the smallest that avoids a read-after-write hazard) |
+| handshakes and cycle counts as simulated | testbenches in `tb/` | `fig19`, `fig20` | `tests/test_sim_results.py` (traces and state occupancy against the model formulas), `results/rtl_*.csv`, `results/rtl_sim_provenance.json` |
+| bit-exact agreement of RTL and model | `make -C sim all` (CI) | | six testbenches, golden vectors in `sim/vectors` |

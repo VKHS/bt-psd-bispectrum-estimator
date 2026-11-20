@@ -1,4 +1,4 @@
-# Convenience targets. Needs python3 with numpy, scipy, matplotlib, pytest (see requirements.txt);
+# Convenience targets. Needs python3 with numpy, scipy, matplotlib, pillow, pytest (see requirements.txt);
 # `make sim` additionally needs Icarus Verilog (iverilog, vvp).
 PY ?= python3
 
@@ -10,7 +10,7 @@ help:
 	@echo "sim          RTL testbenches with Icarus Verilog (needs the golden vectors in sim/vectors)"
 	@echo "vectors      regenerate rtl/cru_rom.v, rtl/btpsd_consts.vh and sim/vectors/*"
 	@echo "experiments  regenerate results/*.csv (about half a minute)"
-	@echo "figures      regenerate docs/figures/*"
+	@echo "figures      regenerate docs/figures/* (22 sheets; fig19 and fig20 read results/rtl_*.csv)"
 	@echo "check        test + lint"
 
 test:
@@ -35,3 +35,6 @@ figures:
 	$(PY) python/scripts/make_diagrams_b.py
 	$(PY) python/scripts/make_diagrams_c.py
 	$(PY) python/scripts/make_plots.py
+	$(PY) python/scripts/make_rtl_figures.py
+	$(PY) python/scripts/make_sim_figures.py
+	$(PY) python/scripts/make_signal_figures.py

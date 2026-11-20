@@ -9,8 +9,9 @@ marked *paper*.
 
 | Layer | What exists | Evidence | Not verified |
 |---|---|---|---|
-| Python model (`python/btpsd`) | floating-point references and bit-accurate fixed-point models of the PSD and bispectrum paths | 73 tests, independent floating-point references, schedule properties | real EEG/EOG/EMG records (the paper's signals are not part of the repository) |
-| RTL control and addressing | line-by-line Python transliteration of the Verilog (`btpsd/rtlmodel.py`) | `tests/test_rtlmodel.py` (6 tests) | typing and syntax of the Verilog text (covered by the simulation below) |
+| Python model (`python/btpsd`) | floating-point references and bit-accurate fixed-point models of the PSD and bispectrum paths | `python/tests/`, 119 tests in all (81 on the model, windows and tables, 7 on the transliteration, 12 on the structure of the Verilog, 9 on the simulation results, 10 on the data behind the figures); independent floating-point references, schedule properties | real EEG/EOG/EMG records (the paper's signals are not part of the repository) |
+| RTL control and addressing | line-by-line Python transliteration of the Verilog (`btpsd/rtlmodel.py`) | `tests/test_rtlmodel.py` (7 tests) | typing and syntax of the Verilog text (covered by the simulation below) |
+| Figures (`docs/figures/`, 22 sheets) | structure drawn from the Verilog by `btpsd/rtlparse.py` (the generator fails if a drawn state or transition is not in the source), cycle traces and state occupancy from the CI simulation (`results/rtl_*.csv`, run id and commit in `results/rtl_sim_provenance.json`), model results from `results/` | `tests/test_rtl_structure.py` (12), `tests/test_sim_results.py` (9), `tests/test_example_sheets.py` (6): the printed numbers equal the model formulas and the simulated counts | a different simulator or synthesis; see `docs/figures/README.md` |
 | RTL (`rtl/`) | Verilog-2001 sources, six self-checking testbenches, golden vectors | structural lint (`scripts/lint_rtl.py`); Icarus Verilog simulation (`make -C sim all`, CI): rotator 9216, butterfly 2048, squarer 1024 vectors, FFT 4 chunks at 207 cycles each, PSD 1024 bins, bispectrum 32 x 32 bins, all bit-exact to the model, including full-scale segments | other simulators and gate-level simulation; synthesis, timing and power; word lengths, windows and `ROUND = 0` other than the vectors' |
 
 The first simulation found two defects, both fixed: the rounded difference of the two extreme codes halves to one LSB
@@ -109,6 +110,12 @@ STALL = max(0, LAT - 8) = 4 idle cycles,   issue cycles = 192 + 4 = 196,   total
 There is no other read-after-write hazard (`results/fft512_cycles_vs_latency.csv`). The transliteration test shows
 that the stall is minimal: one stall cycle fewer corrupts the result.
 
+`rtlmodel.write_back_slack` makes this explicit for all 64 butterflies of pass 1 and pass 2: the slack of a butterfly is
+its issue slot minus the first slot in which its last input word can be read (issue slot of the producing butterfly plus
+`LAT`), and a negative slack is a hazard. With the stall of 4 the smallest slack is 0 (pass 1, butterflies 0 to 7;
+butterflies 8 to 15 have 8, and so on up to 56), pass 2 has between 45 and 52; with a stall of 3 the slack of pass 1
+becomes -1. `fig18` draws the pipelines and this slack, `fig10` the schedule.
+
 ---
 
 ## 4. PSD engine (`rtl/psd_engine.v`, `rtl/bt_psd_top.v`)
@@ -127,6 +134,13 @@ full-scale): 836 cycles for the four FFT phases (209 each) and 115 462 cycles fo
 38.5 k per segment, of which 21 757 cycles in total are squarer cycles of the model. The paper's overlapped design
 (Table 9: 1252 cycles latency) is a different architecture; the two are not comparable.
 
+The simulation prints the cycles of every state, so the figure is not an estimate: `results/rtl_state_occupancy.csv`
+(T_INIT 1, T_CLR 1027, T_LOAD 2048, T_FFT 836, T_SEG 115 462; W_S is 30 973 of the segment cycles, which is 3 per bin
+visit plus the 21 757 squarer cycles of the model, over 3 072 visits) and the residence histogram
+`results/rtl_squarer_wait_hist.csv` agree with the model formulas (`tests/test_sim_results.py`; the histogram built from
+the model equals the simulated one exactly). `fig19` shows the waveforms of the FFT core and the squarer, `fig20` the
+cycles per state; `fig16` and `fig17` the state machines.
+
 Accumulator width: one power value is below `2^(2 WL - 1)`, so the worst case needs `2 WL + 1 + ceil(log2 S)` bits; the
 default `2 WL + 8` covers `S <= 128` segments in the worst case, real signals need far less.
 
@@ -144,7 +158,9 @@ and copied to the start of the next frame), runs the FFT core, and hands the fin
    `conj(F3)`, read-modify-write of the accumulator RAM (`BACCW = 2 WL + 10` bits, real and imaginary).
 
 By FSM inspection one frame costs roughly `32 * MAXB + 3 * MAXB + 4 * MAXB^2` cycles (about 5.2 k cycles for
-`MAXB = 32`); the testbench measures 5219 cycles per frame in the engine phase (209 more for the FFT phase). Worst-case
+`MAXB = 32`); the testbench measures 5219 cycles per frame in the engine phase (209 more for the FFT phase; B_INIT 1, B_CLR 1027,
+B_COPY 1285, B_EXT 1536, B_FFT 1045, B_ENG 26 095 for the five frames of the testbench, `results/rtl_state_occupancy.csv`,
+`fig20`). Worst-case
 accumulator width is
 `2 WL + 1 + ceil(log2 S)` bits (one product is below `2^(2 WL)` in magnitude), so the default `BACCW` covers
 `S <= 512` frames. `LOGB` is limited to 8 (a 9-bit bin address).

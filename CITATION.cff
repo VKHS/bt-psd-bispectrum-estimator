@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite the article below."
+title: "Memory-based radix-8 FFT power spectral and bispectral estimator: models, reference RTL and figures"
+type: software
+authors:
+  - family-names: "Khalili Sadaghiani"
+    given-names: "Abdolvahab"
+    orcid: "https://orcid.org/0000-0003-4870-2768"
+repository-code: "https://github.com/VKHS/bt-psd-bispectrum-estimator"
+keywords:
+  - power spectrum estimation
+  - bispectrum
+  - memory-based FFT
+  - CORDIC
+  - fixed-point
+  - Verilog
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Khalili Sadaghiani"
+      given-names: "AbdolVahab"
+    - family-names: "Forouzandeh"
+      given-names: "Behjat"
+  title: "High-performance power spectral/bispectral estimator for biomedical signal processing applications using novel memory-based FFT processor"
+  journal: "Integration, the VLSI Journal"
+  volume: "99"
+  year: 2024
+  doi: "10.1016/j.vlsi.2024.102241"
