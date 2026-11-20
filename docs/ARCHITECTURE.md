@@ -9,10 +9,10 @@ marked *paper*.
 
 | Layer | What exists | Evidence | Not verified |
 |---|---|---|---|
-| Python model (`python/btpsd`) | floating-point references and bit-accurate fixed-point models of the PSD and bispectrum paths | `python/tests/`, 119 tests in all (81 on the model, windows and tables, 7 on the transliteration, 12 on the structure of the Verilog, 9 on the simulation results, 10 on the data behind the figures); independent floating-point references, schedule properties | real EEG/EOG/EMG records (the paper's signals are not part of the repository) |
+| Python model (`python/btpsd`) | floating-point references and bit-accurate fixed-point models of the PSD and bispectrum paths | `python/tests/`, 131 tests in all (81 on the model, windows and tables, 7 on the transliteration, 12 on the structure of the Verilog, 9 on the simulation results, 10 on the data behind the figures, 12 on the configuration matrix); independent floating-point references, schedule properties | real EEG/EOG/EMG records (the paper's signals are not part of the repository) |
 | RTL control and addressing | line-by-line Python transliteration of the Verilog (`btpsd/rtlmodel.py`) | `tests/test_rtlmodel.py` (7 tests) | typing and syntax of the Verilog text (covered by the simulation below) |
-| Figures (`docs/figures/`, 22 sheets) | structure drawn from the Verilog by `btpsd/rtlparse.py` (the generator fails if a drawn state or transition is not in the source), cycle traces and state occupancy from the CI simulation (`results/rtl_*.csv`, run id and commit in `results/rtl_sim_provenance.json`), model results from `results/` | `tests/test_rtl_structure.py` (12), `tests/test_sim_results.py` (9), `tests/test_example_sheets.py` (6): the printed numbers equal the model formulas and the simulated counts | a different simulator or synthesis; see `docs/figures/README.md` |
-| RTL (`rtl/`) | Verilog-2001 sources, six self-checking testbenches, golden vectors | structural lint (`scripts/lint_rtl.py`); Icarus Verilog simulation (`make -C sim all`, CI): rotator 9216, butterfly 2048, squarer 1024 vectors, FFT 4 chunks at 207 cycles each, PSD 1024 bins, bispectrum 32 x 32 bins, all bit-exact to the model, including full-scale segments | other simulators and gate-level simulation; synthesis, timing and power; word lengths, windows and `ROUND = 0` other than the vectors' |
+| Figures (`docs/figures/`, 23 sheets) | structure drawn from the Verilog by `btpsd/rtlparse.py` (the generator fails if a drawn state or transition is not in the source), cycle traces and state occupancy from the CI simulation (`results/rtl_*.csv`, run id and commit in `results/rtl_sim_provenance.json`), model results from `results/` | `tests/test_rtl_structure.py` (12), `tests/test_sim_results.py` (9), `tests/test_example_sheets.py` (6): the printed numbers equal the model formulas and the simulated counts | a different simulator or synthesis; see `docs/figures/README.md` |
+| RTL (`rtl/`) | Verilog-2001 sources, six self-checking testbenches, golden vectors | structural lint (`scripts/lint_rtl.py`); Icarus Verilog simulation (`make -C sim all`, CI): rotator 9216, butterfly 2048, squarer 1024 vectors, FFT 4 chunks at 207 cycles each, PSD 1024 bins, bispectrum 32 x 32 bins, all bit-exact to the model, including full-scale segments; configuration matrix (`make -C sim matrix`, CI job `rtl-matrix`): both top levels bit-exact for 25 further configurations (WL 10 to 16, four windows, `ROUND` 0 and 1, serial and multiplier squarer) | other simulators and gate-level simulation; synthesis, timing and power; `WL` outside 10 to 16, other rotator ROM tolerances, `LOGB` other than 5, the cells of the matrix that were not run |
 
 The first simulation found two defects, both fixed: the rounded difference of the two extreme codes halves to one LSB
 above the largest code, which the model carried on while the RTL wrapped it (both now clamp, see section 2), and two
@@ -205,3 +205,14 @@ windows (`rsat` in `psd_engine.v`, `rsat_win` in `bispectrum_engine.v`) is not r
 Blackman window taps sum to 1 in magnitude (Hamming sums to 1.001), and the merge would take six neighbouring differences
 `D` of full-scale magnitude with matching signs, which none of the inputs approaches. The `(-j)`
 negation saturation is not reached either (`ROUND = 1`, see section 2).
+
+**Configuration matrix.** The default testbenches fix one configuration per top level. `python/scripts/run_rtl_matrix.py`
+(`make -C sim matrix`; CI job `rtl-matrix`, four shards) regenerates the golden vectors of the model for 25 configurations
+(16 PSD, 9 bispectrum) and hands each configuration to the same testbenches through macros: word length 10, 12, 14 and 16,
+the four windows (the integer taps of the model are checked against `rtl/btpsd_consts.vh` first), `ROUND` 0 and 1, serial
+squarer and multiplier. Every run compares all 1 024 result words with the model, and all 25 match
+(`results/rtl_config_matrix.csv`, drawn on `fig23`; the CI run is named in `results/rtl_config_matrix_provenance.json`). The
+table also shows that the full-scale segments reach the butterfly clamp at every word length with rounding (4 differences in
+the PSD vectors, 13 in the bispectrum vectors) and that truncation never reaches it. The expected values come from the model,
+so a pass shows that the Verilog follows the model's arithmetic in those configurations; it does not test the model against
+the paper.

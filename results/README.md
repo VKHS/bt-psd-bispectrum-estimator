@@ -34,6 +34,8 @@ model is involved in producing them; `python/tests/test_sim_results.py` compares
 | `rtl_trace_squarer.csv` | `mag_sq_odd`, three directed examples: `start`, `busy`, `done`, inputs, product, per cycle |
 | `rtl_state_occupancy.csv` | cycles per FSM state of `bt_psd_top` / `psd_engine` and `bt_bispectrum_top` / `bispectrum_engine`, from reset release to the last result |
 | `rtl_squarer_wait_hist.csv` | histogram of the time `psd_engine` waits in state `W_S` per bin |
+| `rtl_config_matrix.csv` | one row per configuration of `python/scripts/run_rtl_matrix.py` (25 configurations (16 PSD, 9 bispectrum): word length 10, 12, 14 and 16, the four windows, `ROUND` 0 and 1, serial squarer and multiplier): result of the top-level testbench against the model, words compared, clamped differences in the vectors |
+| `rtl_config_matrix_provenance.json` | the CI run and commit that produced `rtl_config_matrix.csv`, with the meaning of its columns |
 
 The simulated engines are the sequential reference engines of this repository. Their cycle counts say nothing about the
 overlapped architecture of the paper (Table 9) and are not to be compared with it; the RTL is not synthesised, so there is

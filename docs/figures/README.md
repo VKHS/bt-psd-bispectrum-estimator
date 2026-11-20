@@ -1,6 +1,6 @@
 # Figure sheets
 
-Twenty-two sheets, each as PNG (for reading) and SVG (for editing). They are drawn by the scripts in `python/scripts/`
+Twenty-three sheets, each as PNG (for reading) and SVG (for editing). They are drawn by the scripts in `python/scripts/`
 (`make figures` runs all of them) and share one style (`python/btpsd/viz.py`). The paper's own figures are in
 `docs/paper_figures/`; the manifest there says which sheet is the counterpart of which paper figure.
 
@@ -40,6 +40,7 @@ Values reported in the paper appear only as hollow diamonds or in text marked *p
 | `fig18_pipeline_timing` | rotator wavefront, butterfly lane diagram, write-back hazard and slack of all 64 butterflies | `make_rtl_figures.py` | Verilog, model |
 | `fig19_interface_timing` | waveforms of `fft512_mem` and `mag_sq_odd`, residence time in `W_S` (model prediction as markers) | `make_sim_figures.py` | simulation |
 | `fig20_cycle_budget` | cycles per state of both engines (per-state formulas as markers), phases of both top levels | `make_sim_figures.py` | simulation |
+| `fig23_rtl_config_matrix` | which of the 25 configurations of the two top levels were simulated (word length, window, rounding, squarer), each bit-exact to the model, with the clamp count of the vectors | `make_sim_figures.py` | simulation |
 
 ## Results of the model
 
@@ -57,5 +58,7 @@ Values reported in the paper appear only as hollow diamonds or in text marked *p
   multiply-accumulate at a time) and to the testbench data of `sim/vectors`. They are not comparable with the figures of
   Table 9 of the paper, which describes an overlapped architecture and was not simulated here.
 * The RTL is simulated, not synthesised: no sheet shows area, frequency or power.
+* `fig23` compares the RTL with the model: the expected values of every run come from the model, so it does not test the
+  model against the paper.
 * `python/tests/test_rtl_structure.py` and `python/tests/test_sim_results.py` tie the drawn structure and the printed
   numbers to the Verilog and to the model formulas.

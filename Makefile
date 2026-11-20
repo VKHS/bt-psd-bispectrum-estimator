@@ -11,7 +11,7 @@ help:
 	@echo "matrix       RTL against the model for 25 word-length, window, rounding and squarer variants (Icarus Verilog)"
 	@echo "vectors      regenerate rtl/cru_rom.v, rtl/btpsd_consts.vh and sim/vectors/*"
 	@echo "experiments  regenerate results/*.csv (about half a minute)"
-	@echo "figures      regenerate docs/figures/* (22 sheets; fig19 and fig20 read results/rtl_*.csv)"
+	@echo "figures      regenerate docs/figures/* (23 sheets; fig19, fig20 and fig23 read results/rtl_*.csv)"
 	@echo "check        test + lint"
 
 test:

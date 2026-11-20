@@ -61,7 +61,7 @@ lives in this repository. Columns: **Model** = `python/btpsd`, **RTL** = `rtl/` 
 ## Figures
 
 The paper's 32 figures are in `docs/paper_figures/`; the manifest there names, for each figure, the page and the
-counterpart drawn in this repository. The 22 sheets of `docs/figures/` are drawn from the model, from the Verilog sources
+counterpart drawn in this repository. The 23 sheets of `docs/figures/` are drawn from the model, from the Verilog sources
 and from the simulation traces; `docs/figures/README.md` lists them with their scripts and their data basis.
 
 ## Beyond the paper: the RTL
@@ -76,3 +76,4 @@ checked:
 | pipeline latencies, issue stall of the FFT core | `cru_rotate.v`, `r8_butterfly.v`, `fft512_mem.v` | `fig18` | `tests/test_rtlmodel.py` (`write_back_slack`: the stall of 4 cycles is the smallest that avoids a read-after-write hazard) |
 | handshakes and cycle counts as simulated | testbenches in `tb/` | `fig19`, `fig20` | `tests/test_sim_results.py` (traces and state occupancy against the model formulas), `results/rtl_*.csv`, `results/rtl_sim_provenance.json` |
 | bit-exact agreement of RTL and model | `make -C sim all` (CI) | | six testbenches, golden vectors in `sim/vectors` |
+| the same for 25 further configurations of the top levels (WL 10 to 16, four windows, ROUND 0 and 1, serial and multiplier squarer) | `make -C sim matrix` (CI job `rtl-matrix`) | `fig23` | `tests/test_rtl_matrix.py`, `results/rtl_config_matrix.csv` |
