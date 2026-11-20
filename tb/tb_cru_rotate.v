@@ -23,7 +23,7 @@ module tb_cru_rotate;
         $readmemh("sim/vectors/cru_wl16_out.mem", vout);
         errs = 0;
         xr = 0;  xi = 0;  q = 0;
-        for (i = 0; i < N + LAT + 1; i = i + 1) begin
+        for (i = 0; i < N + LAT; i = i + 1) begin
             @(negedge clk);
             if (i >= LAT) begin
                 if ({yr, yi} !== vout[i-LAT]) begin
