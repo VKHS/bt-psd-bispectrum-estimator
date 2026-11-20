@@ -1,26 +1,63 @@
-# fixed_point_model.py
-#
-# Fixed‑point utilities and CORDIC‑style rotation tools that reflect
-# the dyadic‑angle, shift‑and‑add philosophy used in the paper’s CRU
-# (Table 5 & Table 6, Fig. 17). :contentReference[oaicite:14]{index=14}
-#
-# This code is intended for algorithm‑level and SQNR studies, not as
-# an exact micro‑architecture replica of the FPGA design.
+"""Fixed-point arithmetic primitives shared by every bit-accurate model.
+
+Everything here is *integer* arithmetic on ``numpy.int64`` arrays (or Python
+ints).  The same conventions are used by the RTL in ``rtl/`` so that the
+Python models can serve as golden references for the testbenches:
+
+* two's-complement words of ``wl`` bits, ``frac`` fractional bits
+  (``Q1.(wl-1)`` for normalised data in ``[-1, 1)``),
+* right shifts are *arithmetic*; ``rounding='round'`` adds half an LSB before
+  the shift (round-half-up), ``rounding='trunc'`` simply floors,
+* overflow either saturates (default, what the RTL does) or wraps.
+
+The module also provides canonical-signed-digit (CSD / non-adjacent form)
+helpers.  Multiplication by a constant realised as a handful of shifted
+additions is the arithmetic primitive of the paper's multiplierless central
+rotational unit (CRU), of the folded fractional-delay filter and of the folded
+window filter.
+"""
 
 from __future__ import annotations
-import numpy as np
+
 from dataclasses import dataclass
 
+import numpy as np
 
-# ---------------------------
-# Fixed‑point configuration & quantization
-# ---------------------------
+__all__ = [
+    "QFormat",
+    "FixedPointConfig",
+    "saturate",
+    "wrap",
+    "rshift",
+    "quantize_real",
+    "dequantize_real",
+    "naf",
+    "naf_weight",
+    "naf_weight_array",
+    "csd_value",
+    "best_csd_int",
+    "csd_from_real",
+]
 
-@dataclass
-class FixedPointConfig:
-    wl: int         # total word length in bits (including sign)
-    frac: int       # fractional bits
+ROUNDING_MODES = ("trunc", "round")
+
+
+# ---------------------------------------------------------------------------
+# Word formats
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class QFormat:
+    """Signed (or unsigned) fixed-point word: ``wl`` bits, ``frac`` fraction bits."""
+
+    wl: int
+    frac: int
     signed: bool = True
+
+    def __post_init__(self) -> None:
+        if self.wl < 2:
+            raise ValueError("wl must be >= 2")
+        if not 0 <= self.frac < self.wl + 32:
+            raise ValueError("frac out of range")
 
     @property
     def scale(self) -> int:
@@ -28,196 +65,160 @@ class FixedPointConfig:
 
     @property
     def min_int(self) -> int:
-        if self.signed:
-            return -(1 << (self.wl - 1))
-        else:
-            return 0
+        return -(1 << (self.wl - 1)) if self.signed else 0
 
     @property
     def max_int(self) -> int:
-        if self.signed:
-            return (1 << (self.wl - 1)) - 1
-        else:
-            return (1 << self.wl) - 1
+        return (1 << (self.wl - 1)) - 1 if self.signed else (1 << self.wl) - 1
+
+    def quantize(self, x, rounding: str = "round", sat: bool = True) -> np.ndarray:
+        """Real values -> integer codes."""
+        return quantize_real(x, self, rounding=rounding, sat=sat)
+
+    def to_float(self, q) -> np.ndarray:
+        """Integer codes -> real values."""
+        return dequantize_real(q, self)
 
 
-def quantize_real(x: np.ndarray | float, cfg: FixedPointConfig) -> np.ndarray:
+# Name used by the original repository scripts.
+FixedPointConfig = QFormat
+
+
+# ---------------------------------------------------------------------------
+# Elementary integer operations
+# ---------------------------------------------------------------------------
+def saturate(x, wl: int, signed: bool = True) -> np.ndarray:
+    """Clip integers to the representable range of a ``wl``-bit word."""
+    x = np.asarray(x, dtype=np.int64)
+    if signed:
+        lo, hi = -(1 << (wl - 1)), (1 << (wl - 1)) - 1
+    else:
+        lo, hi = 0, (1 << wl) - 1
+    return np.clip(x, lo, hi)
+
+
+def wrap(x, wl: int) -> np.ndarray:
+    """Two's-complement wrap-around to ``wl`` bits."""
+    x = np.asarray(x, dtype=np.int64)
+    m = (1 << wl) - 1
+    x = x & m
+    return np.where(x >= (1 << (wl - 1)), x - (1 << wl), x)
+
+
+def rshift(x, s: int, rounding: str = "round") -> np.ndarray:
+    """Arithmetic right shift by ``s >= 0`` with the chosen rounding.
+
+    ``'trunc'`` is ``x >> s`` (floor).  ``'round'`` is round-half-up,
+    ``(x + 2**(s-1)) >> s`` - one adder in hardware.
     """
-    Quantize real values to fixed‑point integers using round‑to‑nearest
-    and saturation.
-    """
+    if rounding not in ROUNDING_MODES:
+        raise ValueError(f"rounding must be one of {ROUNDING_MODES}")
+    x = np.asarray(x, dtype=np.int64)
+    if s < 0:
+        raise ValueError("shift must be >= 0")
+    if s == 0:
+        return x
+    if rounding == "trunc":
+        return x >> s
+    return (x + (1 << (s - 1))) >> s
+
+
+def quantize_real(x, cfg: QFormat, rounding: str = "round", sat: bool = True) -> np.ndarray:
+    """Quantise real numbers to integer codes of ``cfg``."""
     x = np.asarray(x, dtype=float)
-    val = np.round(x * cfg.scale).astype(np.int64)
-    val = np.clip(val, cfg.min_int, cfg.max_int)
-    return val
+    scaled = x * cfg.scale
+    q = np.floor(scaled + 0.5) if rounding == "round" else np.floor(scaled)
+    q = q.astype(np.int64)
+    return saturate(q, cfg.wl, cfg.signed) if sat else wrap(q, cfg.wl)
 
 
-def dequantize_real(q: np.ndarray | int, cfg: FixedPointConfig) -> np.ndarray:
+def dequantize_real(q, cfg: QFormat) -> np.ndarray:
+    """Integer codes -> real numbers."""
+    return np.asarray(q, dtype=np.int64).astype(float) / cfg.scale
+
+
+# ---------------------------------------------------------------------------
+# Canonical signed digit (non-adjacent form)
+# ---------------------------------------------------------------------------
+def naf(n: int) -> list[tuple[int, int]]:
+    """Non-adjacent form of the integer ``n``.
+
+    Returns ``[(sign, shift), ...]`` (ascending shifts) with
+    ``n == sum(sign * 2**shift)`` and the minimum possible number of non-zero
+    digits.  ``naf(0) == []``.
     """
-    Convert fixed‑point integers back to float using cfg.frac.
+    n = int(n)
+    neg = n < 0
+    n = -n if neg else n
+    digits: list[tuple[int, int]] = []
+    shift = 0
+    while n:
+        if n & 1:
+            d = 2 - (n & 3)  # +1 if n % 4 == 1, -1 if n % 4 == 3
+            digits.append((-d if neg else d, shift))
+            n -= d
+        n >>= 1
+        shift += 1
+    return digits
+
+
+def _popcount_u64(x: np.ndarray) -> np.ndarray:
+    x = np.asarray(x).astype(np.uint64)
+    with np.errstate(over="ignore"):  # SWAR popcount relies on modular uint64 arithmetic
+        x = x - ((x >> np.uint64(1)) & np.uint64(0x5555555555555555))
+        x = (x & np.uint64(0x3333333333333333)) + ((x >> np.uint64(2)) & np.uint64(0x3333333333333333))
+        x = (x + (x >> np.uint64(4))) & np.uint64(0x0F0F0F0F0F0F0F0F)
+        return ((x * np.uint64(0x0101010101010101)) >> np.uint64(56)).astype(np.int64)
+
+
+def naf_weight_array(n) -> np.ndarray:
+    """Vectorised NAF weight: ``popcount((|n| ^ 3|n|) >> 1)`` (Reitwiesner)."""
+    a = np.abs(np.asarray(n, dtype=np.int64)).astype(np.uint64)
+    with np.errstate(over="ignore"):
+        return _popcount_u64((a ^ (a * np.uint64(3))) >> np.uint64(1))
+
+
+def naf_weight(n: int) -> int:
+    """Number of non-zero CSD digits of ``n`` (= adders needed + 1)."""
+    return int(naf_weight_array(int(n)))
+
+
+def csd_value(digits: list[tuple[int, int]]) -> int:
+    """Inverse of :func:`naf`."""
+    return sum(s * (1 << e) for s, e in digits)
+
+
+def best_csd_int(target: float, max_terms: int) -> int:
+    """Integer closest to ``target`` whose CSD weight is ``<= max_terms``.
+
+    Exact (the search window doubles until no farther integer can win).
+    Ties go to the smaller magnitude.  ``max_terms >= 1``; a target that
+    rounds to 0 returns 0.
     """
-    q = np.asarray(q, dtype=np.int64)
-    return q.astype(float) / cfg.scale
+    if max_terms < 1:
+        raise ValueError("max_terms must be >= 1")
+    sign = -1 if target < 0 else 1
+    t = abs(float(target))
+    base = int(np.floor(t))
+    w = 16
+    while True:
+        lo, hi = max(0, base - w), base + 1 + w
+        cand = np.arange(lo, hi + 1, dtype=np.int64)
+        ok = naf_weight_array(cand) <= max_terms
+        if ok.any():
+            c = cand[ok]
+            dist = np.abs(c - t)
+            j = int(np.argmin(dist))  # ascending candidates -> ties keep the smaller one
+            if dist[j] <= w:  # every integer outside the window is farther than w
+                return sign * int(c[j])
+        w *= 2
 
 
-# ---------------------------
-# CORDIC‑style rotation (vector rotation mode)
-# ---------------------------
+def csd_from_real(value: float, frac: int, max_terms: int) -> tuple[int, list[tuple[int, int]]]:
+    """Approximate ``value`` by ``m / 2**frac`` with at most ``max_terms`` CSD digits.
 
-def _cordic_k_gain(n_iter: int) -> float:
-    """Compute the CORDIC gain K for n_iter steps."""
-    return np.prod([1.0 / np.sqrt(1.0 + 2.0 ** (-2 * i)) for i in range(n_iter)])
-
-
-def cordic_rotate_float(
-    x: float,
-    y: float,
-    angle_rad: float,
-    n_iter: int = 20,
-) -> tuple[float, float]:
+    Returns ``(m, digits)`` where ``m`` is the integer numerator and ``digits``
+    its non-adjacent form.  The implied constant is ``m / 2**frac``.
     """
-    Floating‑point CORDIC rotation (rotation mode) for reference.
-
-    Starting from (x,y), apply a rotation of 'angle_rad' using
-    dyadic steps atan(2^-i). Returns (x', y') in float.
-    """
-    z = angle_rad
-    atan_lut = [np.arctan(2.0 ** (-i)) for i in range(n_iter)]
-    K = _cordic_k_gain(n_iter)
-
-    for i in range(n_iter):
-        if z >= 0:
-            x_new = x - y * (2.0 ** (-i))
-            y_new = y + x * (2.0 ** (-i))
-            z -= atan_lut[i]
-        else:
-            x_new = x + y * (2.0 ** (-i))
-            y_new = y - x * (2.0 ** (-i))
-            z += atan_lut[i]
-        x, y = x_new, y_new
-
-    # Compensate for CORDIC gain
-    return x * K, y * K
-
-
-def cordic_rotate_fixed_int(
-    angle_rad: float,
-    n_iter: int,
-    cfg: FixedPointConfig,
-) -> tuple[float, float]:
-    """
-    Fixed‑point CORDIC rotation of the unit vector (1,0) by angle_rad.
-
-    - Uses integer shifts and adds on a fixed‑point representation.
-    - Keeps the angle accumulator z in float for simplicity.
-    - Returns (cos(angle), sin(angle)) *approximately* as floats.
-
-    This models the idea of Table 5 & 6 (dyadic tangents, small shift
-    depths) without encoding every micro‑rotation case separately. :contentReference[oaicite:15]{index=15}
-    """
-    z = angle_rad
-    atan_lut = [np.arctan(2.0 ** (-i)) for i in range(n_iter)]
-    K = _cordic_k_gain(n_iter)
-
-    # Start with (1,0) in fixed‑point
-    xi = int(round(1.0 * cfg.scale))
-    yi = 0
-
-    for i in range(n_iter):
-        if z >= 0:
-            xi_new = xi - (yi >> i)
-            yi_new = yi + (xi >> i)
-            z -= atan_lut[i]
-        else:
-            xi_new = xi + (yi >> i)
-            yi_new = yi - (xi >> i)
-            z += atan_lut[i]
-
-        # Saturation
-        xi = int(np.clip(xi_new, cfg.min_int, cfg.max_int))
-        yi = int(np.clip(yi_new, cfg.min_int, cfg.max_int))
-
-    # Dequantize and apply gain compensation
-    x_float = (xi / cfg.scale) * K
-    y_float = (yi / cfg.scale) * K
-    return x_float, y_float
-
-
-def cordic_twiddle(
-    angle_rad: float,
-    cfg: FixedPointConfig,
-    n_iter: int = 14,
-) -> complex:
-    """
-    Use integer CORDIC to approximate e^{j * angle_rad} in fixed‑point.
-
-    This plays the role of a "CORDIC‑generated twiddle factor" as in the
-    central rotational unit (CRU), though here it is just a software model. :contentReference[oaicite:16]{index=16}
-    """
-    xr, yr = cordic_rotate_fixed_int(angle_rad, n_iter=n_iter, cfg=cfg)
-    return xr + 1j * yr
-
-
-# ---------------------------
-# Quantized complex multiplication
-# ---------------------------
-
-def quantized_complex_mult(
-    a: complex,
-    b: complex,
-    cfg: FixedPointConfig,
-) -> complex:
-    """
-    Multiply two complex numbers in fixed‑point:
-
-      (a_r + j a_i) * (b_r + j b_i)
-
-    using integer arithmetic with saturation and scaling by cfg.frac.
-    This lets you study the effect of finite precision on complex
-    multiplications (like FFT twiddle rotations, FD/window taps, etc.).
-    """
-    a = complex(a)
-    b = complex(b)
-
-    # Quantize real and imaginary parts separately
-    ar_q = quantize_real(a.real, cfg)
-    ai_q = quantize_real(a.imag, cfg)
-    br_q = quantize_real(b.real, cfg)
-    bi_q = quantize_real(b.imag, cfg)
-
-    ar = ar_q.astype(np.int64)
-    ai = ai_q.astype(np.int64)
-    br = br_q.astype(np.int64)
-    bi = bi_q.astype(np.int64)
-
-    # Integer complex multiply:
-    # (ar + j ai)*(br + j bi) = (ar*br - ai*bi) + j (ar*bi + ai*br)
-    real_int = ar * br - ai * bi
-    imag_int = ar * bi + ai * br
-
-    # Scale back from scale^2 to scale^1
-    real_q = np.clip(real_int // cfg.scale, cfg.min_int, cfg.max_int)
-    imag_q = np.clip(imag_int // cfg.scale, cfg.min_int, cfg.max_int)
-
-    real = dequantize_real(real_q, cfg)
-    imag = dequantize_real(imag_q, cfg)
-    return real + 1j * imag
-
-
-# Example quick checks
-if __name__ == "__main__":
-    cfg = FixedPointConfig(wl=16, frac=14, signed=True)
-
-    # Test CORDIC rotation vs float
-    for ang in [0.0, np.pi / 4, np.pi / 2]:
-        xf, yf = cordic_rotate_float(1.0, 0.0, ang, n_iter=20)
-        xi, yi = cordic_rotate_fixed_int(ang, n_iter=14, cfg=cfg)
-        print(f"angle={ang:.3f} float=({xf:.6f},{yf:.6f})  fixed=({xi:.6f},{yi:.6f})")
-
-    # Test twiddle + quantized complex multiplication
-    angle = 2 * np.pi * 5 / 64
-    tw = cordic_twiddle(angle, cfg)
-    z = 1.0 + 0.5j
-    zq = quantized_complex_mult(z, tw, cfg)
-    print("Twiddle approx:", tw)
-    print("Quantized product:", zq)
+    m = best_csd_int(value * (1 << frac), max_terms)
+    return m, naf(m)
