@@ -49,7 +49,7 @@ module tb_bispectrum_top;
         @(negedge clk);  in_valid = 1'b0;
         repeat (2) @(negedge clk);
         while (!in_ready) @(negedge clk);
-        $display("all %0d frames processed at t = %0t ns", `BSP_S, $time);
+        $display("all %0d frames processed at t = %0d ns", `BSP_S, $time);
         for (i = 0; i < MAXB*MAXB + 1; i = i + 1) begin
             @(negedge clk);
             if (i >= 1) begin

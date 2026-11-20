@@ -193,10 +193,28 @@ def sq_vectors(wl: int = 16, n: int = 1024, seed: int = 4) -> dict:
 # ---------------------------------------------------------------------------
 # PSD (whole estimator)
 # ---------------------------------------------------------------------------
-def psd_vectors(wl: int = 12, window: str = "hann", nchunks: int = 4, seed: int = 5, peak: float = 0.5) -> dict:
-    """Input: ``nchunks * 512`` real sample codes; expected: ``P_int`` (1024 words) of :func:`psd_fixed`."""
+def clipped_tone(n: int, seed: int, bin_1024: float = 100.5, gain: float = 1.3, noise: float = 0.3) -> np.ndarray:
+    """Hard-clipped full-scale tone half-way between two 512-point bins plus noise (phase continuous in ``n``).
+
+    The tone sits on an odd bin of the 1024-bin grid, so the fractional-delay merge and the window see their largest
+    inputs; the clipping adds broadband energy and puts many samples on the extreme codes.
+    """
+    k = np.arange(n)
+    w = np.random.default_rng(seed).standard_normal(n)
+    return np.clip(gain * np.sin(2 * np.pi * bin_1024 * k / 1024) + noise * w, -1.0, 1.0)
+
+
+def psd_vectors(wl: int = 12, window: str = "hann", nchunks: int = 4, seed: int = 5, peak: float = 0.5,
+                stress_from: int = 2) -> dict:
+    """Input: ``nchunks * 512`` real sample codes; expected: ``P_int`` (1024 words) of :func:`psd_fixed`.
+
+    Chunks before ``stress_from`` are pink noise at ``peak``; from there on the input is a hard-clipped full-scale tone
+    (:func:`clipped_tone`), so that the saturating paths of the engine are part of the comparison.
+    """
     cfg = HwConfig(wl=wl, window=window)
     x = sg.pink(nchunks * 512, seed, peak=peak)
+    if stress_from < nchunks:
+        x[stress_from * 512:] = clipped_tone(nchunks * 512, seed + 100)[stress_from * 512:]
     codes, _ = to_fixed(x, wl, cfg.rounding)
     res = psd_fixed(codes, cfg, quantize=False)
     return {"cfg": cfg, "x": codes, "P": res.P_int, "S": res.S, "avg_shift": res.avg_shift, "acc": res.acc,
@@ -206,11 +224,19 @@ def psd_vectors(wl: int = 12, window: str = "hann", nchunks: int = 4, seed: int 
 # ---------------------------------------------------------------------------
 # bispectrum
 # ---------------------------------------------------------------------------
-def bispec_vectors(wl: int = 12, window: str = "hann", nsamples: int = 512 * 3, max_bin: int = 32, seed: int = 6) -> dict:
-    """Input sample codes (hop 256, 512-sample frames); expected ``B_re, B_im`` of :func:`bispectrum_fixed`."""
+def bispec_vectors(wl: int = 12, window: str = "hann", nsamples: int = 512 * 3, max_bin: int = 32, seed: int = 6,
+                   stress_from: int = 768) -> dict:
+    """Input sample codes (hop 256, 512-sample frames); expected ``B_re, B_im`` of :func:`bispectrum_fixed`.
+
+    The first ``stress_from`` samples are the coupled test signal at 0.6 of its peak; the rest is the same signal
+    amplified 2.5 times and hard-clipped to full scale, so that the saturating paths of the engine are exercised.
+    """
     cfg = BispecConfig(wl=wl, window=window, max_bin=max_bin)
     x, _ = sg.qpc(nsamples, coupled=True, seed=seed)
-    codes, _ = to_fixed(np.asarray(x, dtype=float) * 0.6, wl, cfg.rounding)
+    x = np.asarray(x, dtype=float)
+    y = 0.6 * x
+    y[stress_from:] = np.clip(2.5 * x[stress_from:], -1.0, 1.0)
+    codes, _ = to_fixed(y, wl, cfg.rounding)
     xs = codes.astype(float) / float(1 << (wl - 1))
     re, im, S, shift = bispectrum_fixed(xs, cfg)
     return {"cfg": cfg, "x": codes, "B_re": re, "B_im": im, "S": S, "avg_shift": shift}
@@ -230,10 +256,10 @@ All files are `$readmemh` text, one word per line, lower-case hex, two's complem
 | `fft_wl16_out_re.mem`, `fft_wl16_out_im.mem` | 4 chunks x 512 words, natural frequency order, scale 1/512 | `tb/tb_fft512_mem.v` |
 | `fft_wl16.vh` | Verilog macros: chunks, `FFT_TOTAL_CYCLES` (model: first issue to last readable word = start edge to `done`), `FFT_STALL_CYCLES` | `tb/tb_fft512_mem.v` |
 | `sq_wl16_in.mem` / `sq_wl16_out.mem` | in `{re[16], im[16]}`, out `re^2 + im^2` (32 bit) | `tb/tb_mag_sq_odd.v` |
-| `psd_wl12_x.mem` | 4 chunks x 512 real sample codes (12 bit) | `tb/tb_psd_top.v` |
+| `psd_wl12_x.mem` | 4 chunks x 512 real sample codes (12 bit): chunks 0-1 pink noise at half scale, chunks 2-3 a hard-clipped full-scale tone (saturating paths) | `tb/tb_psd_top.v` |
 | `psd_wl12_P.mem` | 1024 words, accumulated and shifted power `P_int` | `tb/tb_psd_top.v` |
 | `psd_wl12.vh` | Verilog macros: segments `S`, `AVG_SHIFT` | `tb/tb_psd_top.v` |
-| `bsp_wl12_x.mem` | real sample codes (12 bit), hop 256 | `tb/tb_bispectrum_top.v` |
+| `bsp_wl12_x.mem` | real sample codes (12 bit), hop 256: the first 768 samples at 0.6 of the peak, the rest amplified and hard-clipped to full scale | `tb/tb_bispectrum_top.v` |
 | `bsp_wl12_B_re.mem`, `bsp_wl12_B_im.mem` | `max_bin^2` words row-major `[f1][f2]`, `2*wl+10` bits (34 for wl = 12) | `tb/tb_bispectrum_top.v` |
 | `bsp_wl12.vh` | Verilog macros: frames `S`, `AVG_SHIFT`, `MAX_BIN` | `tb/tb_bispectrum_top.v` |
 """
