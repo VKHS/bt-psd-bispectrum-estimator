@@ -31,6 +31,30 @@ module tb_psd_top;
         if (dut.st == 3'd4) c_seg = c_seg + 1;
     end
 
+    // State occupancy (cycles per state of the top-level controller and of the segment engine, whole run) and the
+    // residence time of the engine in W_S (= 4'd11, waiting for the squarer) per bin, binned by floor(log2(cycles)).
+    // Printed as OCC and HIST lines, analysed by python/scripts/make_sim_figures.py.
+    integer occ_top [0:7];
+    integer occ_eng [0:15];
+    integer ws_hist [0:15];
+    integer ws_len = 0, lg, oi;
+    initial begin
+        for (oi = 0; oi < 8; oi = oi + 1)  occ_top[oi] = 0;
+        for (oi = 0; oi < 16; oi = oi + 1) occ_eng[oi] = 0;
+        for (oi = 0; oi < 16; oi = oi + 1) ws_hist[oi] = 0;
+    end
+    always @(posedge clk) if (rst_n) begin
+        occ_top[dut.st]       = occ_top[dut.st] + 1;
+        occ_eng[dut.u_eng.st] = occ_eng[dut.u_eng.st] + 1;
+        if (dut.u_eng.st == 4'd11) ws_len = ws_len + 1;
+        else if (ws_len != 0) begin
+            lg = 0;
+            while ((ws_len >> (lg + 1)) != 0) lg = lg + 1;
+            ws_hist[lg] = ws_hist[lg] + 1;
+            ws_len = 0;
+        end
+    end
+
     integer i, errs, cyc0, cyc;
     initial begin
         $readmemh("sim/vectors/psd_wl12_x.mem", xmem);
@@ -54,6 +78,9 @@ module tb_psd_top;
         $display("all %0d segments processed at t = %0d ns", `PSD_S, $time);
         $display("T_FFT %0d cycles for %0d chunks, T_SEG %0d cycles for %0d segments (serial squarer: %0d squarer cycles in the model)",
                  c_fft, `PSD_NCHUNKS, c_seg, `PSD_S, `PSD_SQUARER_CYCLES);
+        for (i = 0; i < 8; i = i + 1)  if (occ_top[i] != 0) $display("OCC,psd_top,%0d,%0d", i, occ_top[i]);
+        for (i = 0; i < 16; i = i + 1) if (occ_eng[i] != 0) $display("OCC,psd_engine,%0d,%0d", i, occ_eng[i]);
+        for (i = 0; i < 16; i = i + 1) if (ws_hist[i] != 0) $display("HIST,psd_sq_wait_log2,%0d,%0d", i, ws_hist[i]);
         for (i = 0; i < 1025; i = i + 1) begin
             @(negedge clk);
             if (i >= 1) begin

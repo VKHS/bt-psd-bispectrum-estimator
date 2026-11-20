@@ -32,6 +32,20 @@ module tb_bispectrum_top;
         if (dut.st == 3'd5) c_eng = c_eng + 1;
     end
 
+    // State occupancy (cycles per state of the top-level controller and of the bispectrum engine, whole run); printed as
+    // OCC lines, analysed by python/scripts/make_sim_figures.py.
+    integer occ_top [0:7];
+    integer occ_eng [0:15];
+    integer oi;
+    initial begin
+        for (oi = 0; oi < 8; oi = oi + 1)  occ_top[oi] = 0;
+        for (oi = 0; oi < 16; oi = oi + 1) occ_eng[oi] = 0;
+    end
+    always @(posedge clk) if (rst_n) begin
+        occ_top[dut.st]       = occ_top[dut.st] + 1;
+        occ_eng[dut.u_eng.st] = occ_eng[dut.u_eng.st] + 1;
+    end
+
     integer i, errs;
     initial begin
         if (`BSP_MAX_BIN != MAXB) begin
@@ -59,6 +73,8 @@ module tb_bispectrum_top;
         $display("all %0d frames processed at t = %0d ns", `BSP_S, $time);
         $display("B_FFT %0d cycles and B_ENG %0d cycles for %0d frames (%0d and %0d per frame)",
                  c_fft, c_eng, `BSP_S, c_fft / `BSP_S, c_eng / `BSP_S);
+        for (i = 0; i < 8; i = i + 1)  if (occ_top[i] != 0) $display("OCC,bsp_top,%0d,%0d", i, occ_top[i]);
+        for (i = 0; i < 16; i = i + 1) if (occ_eng[i] != 0) $display("OCC,bsp_engine,%0d,%0d", i, occ_eng[i]);
         for (i = 0; i < MAXB*MAXB + 1; i = i + 1) begin
             @(negedge clk);
             if (i >= 1) begin

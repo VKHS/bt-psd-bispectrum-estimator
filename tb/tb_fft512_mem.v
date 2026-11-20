@@ -26,6 +26,18 @@ module tb_fft512_mem;
         .start(start), .busy(busy), .done(done), .rd_k(rd_k), .rd_re(rd_re), .rd_im(rd_im));
 
     integer c, n, errs, cycles;
+
+    // Cycle-by-cycle trace of the first transform, sampled at the rising edge like the DUT does.  Cycle 0 is the cycle in
+    // which start is high; the lines (TRACE,fft,...) are analysed by python/scripts/make_sim_figures.py.
+    reg     tracing = 1'b0;
+    integer tcyc = 0, ttail = 0;
+    always @(posedge clk) if (tracing) begin
+        $display("TRACE,fft,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d", tcyc, ld_en, start, busy, done, dut.iss_v, dut.iss_p, dut.iss_b, dut.st);
+        tcyc = tcyc + 1;
+        if (done) ttail = 1;
+        else if (ttail != 0) ttail = ttail + 1;
+        if (ttail == 6) tracing = 1'b0;
+    end
     initial begin
         $readmemh("sim/vectors/fft_wl16_in_re.mem", in_re);
         $readmemh("sim/vectors/fft_wl16_in_im.mem", in_im);
@@ -40,6 +52,7 @@ module tb_fft512_mem;
                 @(negedge clk);
                 ld_en = 1'b1;  ld_addr = n;
                 ld_re = in_re[c*512+n];  ld_im = in_im[c*512+n];
+                if (c == 0 && n == 510) begin tracing = 1'b1; tcyc = -3; end
             end
             @(negedge clk);  ld_en = 1'b0;
             @(negedge clk);  start = 1'b1;

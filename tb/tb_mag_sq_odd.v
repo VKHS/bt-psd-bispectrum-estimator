@@ -20,12 +20,39 @@ module tb_mag_sq_odd;
     mag_sq_odd #(.WL(WL), .SERIAL(0)) dut_m (.clk(clk), .rst_n(rst_n), .start(start), .re(re), .im(im), .busy(busy_m), .done(done_m), .p(p_m));
 
     integer i, errs, cyc, maxabs, ar, ai;
+
+    // Directed examples with a cycle-by-cycle trace (TRACE,sq,... lines, analysed by python/scripts/make_sim_figures.py).
+    // Cycle 0 is the cycle in which start is high; the lines are sampled at the rising edge like the DUT does.
+    task example;
+        input integer tag;
+        input signed [WL-1:0] r;
+        input signed [WL-1:0] m;
+        integer k, pe;
+        begin
+            pe = r * r + m * m;
+            @(negedge clk);
+            re = r;  im = m;  start = 1'b1;
+            for (k = 0; k < 14; k = k + 1) begin
+                @(posedge clk);
+                $display("TRACE,sq,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d", tag, k, start, busy_s, done_s, re, im, p_s);
+                @(negedge clk);
+                start = 1'b0;
+            end
+            if (p_s !== pe) begin
+                errs = errs + 1;
+                $display("MISMATCH directed example %0d: got %0d expected %0d", tag, p_s, pe);
+            end
+        end
+    endtask
     initial begin
         $readmemh("sim/vectors/sq_wl16_in.mem", vin);
         $readmemh("sim/vectors/sq_wl16_out.mem", vout);
         errs = 0;  start = 1'b0;  re = 0;  im = 0;
         repeat (3) @(negedge clk);
         rst_n = 1'b1;
+        example(0, 3, -5);
+        example(1, 0, 0);
+        example(2, -4, 2);
         for (i = 0; i < N; i = i + 1) begin
             @(negedge clk);
             {re, im} = vin[i];
