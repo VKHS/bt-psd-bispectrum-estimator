@@ -56,7 +56,9 @@ Everything below is bit-exact between `python/btpsd` and `rtl/`; the golden vect
   the RTL selects plain truncation (floor); the model's `rounding="trunc"` is its counterpart (the vectors and
   testbenches cover `ROUND = 1` only).
 * **Butterfly scaling.** Every radix-2 add or subtract is immediately followed by `>> 1` (rounded), giving 1/8 per
-  radix-8 butterfly and 1/512 for the 512-point FFT. No stage can overflow; the `(-j)` negation saturates.
+  radix-8 butterfly and 1/512 for the 512-point FFT, and the result is clamped to `WL` bits. The clamp matters in
+  one case only: the rounded difference of the two extreme codes, `(2^(WL-1) - 1) - (-2^(WL-1))`, halves to
+  `+2^(WL-1)`, one LSB above the largest code. The `(-j)` negation saturates in the same way.
 * **Rotation (CRU).** `y = x * exp(-j q pi/512)`, `q` in 0..1023:
   1. octant reduction: `quad = q >> 8`, `r = q & 255`; if `r > 128` then `quad += 1`, `r = 256 - r`;
   2. ROM entry `(a, b, inv)` for `r = 0..128` (129 entries, `inv` with 14 fraction bits, angle tolerance 0.01 rad);

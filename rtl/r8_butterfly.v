@@ -5,7 +5,8 @@
 //   stage 2  distance 2: c0 = g0 + g2, c2 = g0 - g2, c1 = g1 + g3, c3 = (-j)(g1 - g3)          (each result >> 1)
 //   stage 3  distance 1: out[slot] = c0 + c1, out[slot+4] = c0 - c1, out[slot+2] = c2 + c3, ... (each result >> 1)
 //   twiddle  Y[k] *= exp(-j tq[k] pi/512), k = 1..7 (CRU); Y[0] is passed through.
-// Every add/subtract is followed by one rounded right shift, so no overflow is possible; (-j) negation saturates.
+// Every add/subtract is followed by one rounded right shift and clamped to WL bits (only the rounded difference of the
+// two extreme codes can exceed the range, by one LSB); the (-j) negation saturates.
 //
 // Ports are packed buses: slot m of x/y at bits [m*WL +: WL]; twiddle slot k = 1..7 at tq[(k-1)*10 +: 10].
 // tq is presented together with x.  Latency LAT_BFLY = 1 + LAT_CRU + 1 + LAT_CRU = 10 cycles; one butterfly per cycle.
@@ -26,6 +27,8 @@ module r8_butterfly #(
     localparam LC = `LAT_CRU;
 
     // ---- arithmetic helpers --------------------------------------------------------
+    // (a + b) >> 1 and (a - b) >> 1 with rounding, clamped to WL bits.  The clamp only matters for the difference
+    // of the two extreme codes: (2^(WL-1) - 1) - (-2^(WL-1)) + 1 halves to +2^(WL-1), one above the largest code.
     function signed [WL-1:0] hadd;
         input signed [WL-1:0] a;
         input signed [WL-1:0] b;
@@ -33,7 +36,9 @@ module r8_butterfly #(
         begin
             t = a + b;
             if (ROUND) t = t + 1;
-            hadd = t >>> 1;
+            t = t >>> 1;
+            if (t[WL+1:WL-1] == 3'b010) hadd = {1'b0, {(WL-1){1'b1}}};
+            else                        hadd = t[WL-1:0];
         end
     endfunction
 
@@ -44,7 +49,9 @@ module r8_butterfly #(
         begin
             t = a - b;
             if (ROUND) t = t + 1;
-            hsub = t >>> 1;
+            t = t >>> 1;
+            if (t[WL+1:WL-1] == 3'b010) hsub = {1'b0, {(WL-1){1'b1}}};
+            else                        hsub = t[WL-1:0];
         end
     endfunction
 

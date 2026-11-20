@@ -80,12 +80,18 @@ def to_fixed(x, wl: int, rounding: str = "round"):
     return saturate(re, wl), saturate(im, wl)
 
 
-def _addsub_half(ar, ai, br, bi, rounding):
-    """((a + b) >> 1, (a - b) >> 1) for complex integer pairs."""
+def _addsub_half(ar, ai, br, bi, rounding, wl=None):
+    """((a + b) >> 1, (a - b) >> 1) for complex integer pairs, saturated to ``wl`` bits when given.
+
+    With round-half-up the difference of the two extreme codes, ``(2**(wl-1) - 1) - (-2**(wl-1))``, halves to
+    ``+2**(wl-1)``, one LSB above the largest code; the hardware clamps that single case to ``2**(wl-1) - 1``.
+    """
     sr = rshift(ar + br, 1, rounding)
     si = rshift(ai + bi, 1, rounding)
     dr = rshift(ar - br, 1, rounding)
     di = rshift(ai - bi, 1, rounding)
+    if wl is not None:
+        sr, si, dr, di = (saturate(v, wl) for v in (sr, si, dr, di))
     return sr, si, dr, di
 
 
@@ -94,7 +100,7 @@ def dft8_fixed(re, im, rom: RotRom, wl: int, rounding: str = "round"):
     re = np.asarray(re, dtype=np.int64)
     im = np.asarray(im, dtype=np.int64)
     # stage 1: distance 4
-    sr, si, dr, di = _addsub_half(re[..., :4], im[..., :4], re[..., 4:], im[..., 4:], rounding)
+    sr, si, dr, di = _addsub_half(re[..., :4], im[..., :4], re[..., 4:], im[..., 4:], rounding, wl)
     # W8^i on the difference branch: i=0 identity, 1 -> q=128, 2 -> -j, 3 -> q=384
     q = np.array([0, 128, 256, 384])
     dr, di = rotate_fixed(dr, di, q, rom, wl, rounding)
@@ -102,12 +108,12 @@ def dft8_fixed(re, im, rom: RotRom, wl: int, rounding: str = "round"):
     outi = np.empty_like(im)
     for (gr, gi), base in (((sr, si), 0), ((dr, di), 1)):
         # stage 2: distance 2 (c0,c1 sums; c2,c3 differences, c3 *= -j)
-        c0r, c0i, c2r, c2i = _addsub_half(gr[..., 0], gi[..., 0], gr[..., 2], gi[..., 2], rounding)
-        c1r, c1i, e3r, e3i = _addsub_half(gr[..., 1], gi[..., 1], gr[..., 3], gi[..., 3], rounding)
+        c0r, c0i, c2r, c2i = _addsub_half(gr[..., 0], gi[..., 0], gr[..., 2], gi[..., 2], rounding, wl)
+        c1r, c1i, e3r, e3i = _addsub_half(gr[..., 1], gi[..., 1], gr[..., 3], gi[..., 3], rounding, wl)
         c3r, c3i = saturate(e3i, wl), saturate(-e3r, wl)  # (-j)(a + jb) = b - ja
         # stage 3: distance 1
         for slot, (ur, ui, vr, vi) in ((0, (c0r, c0i, c1r, c1i)), (2, (c2r, c2i, c3r, c3i))):
-            pr, pi_, mr, mi = _addsub_half(ur, ui, vr, vi, rounding)
+            pr, pi_, mr, mi = _addsub_half(ur, ui, vr, vi, rounding, wl)
             outr[..., slot + base] = pr
             outi[..., slot + base] = pi_
             outr[..., slot + 4 + base] = mr

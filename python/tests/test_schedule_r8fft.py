@@ -76,3 +76,17 @@ def test_schedule_cycles_model():
     r = S.schedule_cycles(12)
     assert r["stalls_per_pass"] == [0, 4, 0] and r["issue_cycles"] == 192 + 4
     assert r["total_cycles"] == r["issue_cycles"] + 12 - 1
+
+
+def test_butterfly_clamps_the_extreme_difference():
+    """(32767) - (-32768) halves to +32768 with round-half-up; the hardware clamps it to 32767, and so does the model."""
+    from btpsd.cordic import default_rom
+    from btpsd.r8fft import dft8_fixed
+
+    wl = 16
+    hi, lo = (1 << (wl - 1)) - 1, -(1 << (wl - 1))
+    re = np.array([hi, lo, hi, lo, hi, lo, hi, lo], dtype=np.int64)
+    im = np.array([lo, hi, lo, hi, lo, hi, lo, hi], dtype=np.int64)
+    yr, yi = dft8_fixed(re, im, default_rom(), wl)
+    assert yr.max() <= hi and yi.max() <= hi and yr.min() >= lo and yi.min() >= lo
+    assert yr[4] == hi  # (A - B) / 2 would be +32768 without the clamp
