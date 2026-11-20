@@ -2,10 +2,12 @@
 
 Verilog-2001 sources of the reference implementation (design notes: `docs/ARCHITECTURE.md`).
 
-**Status: never compiled or simulated.** The sources were written without an HDL simulator. They pass the structural
-lint (`scripts/lint_rtl.py`), and the control and addressing logic was checked through a line-by-line Python
-transliteration (`python/btpsd/rtlmodel.py`, `python/tests/test_rtlmodel.py`). Run `make -C sim all` to execute the six
-self-checking testbenches against the golden vectors.
+**Status: simulated, not synthesised.** `make -C sim all` compiles the sources with Icarus Verilog (`-g2005 -Wall`) and
+runs six self-checking testbenches against the golden vectors of the model; all six pass, bit for bit (CI repeats this
+on every push). The sources also pass the structural lint (`scripts/lint_rtl.py`), and the control and addressing logic
+has a line-by-line Python transliteration (`python/btpsd/rtlmodel.py`, `python/tests/test_rtlmodel.py`). The tested
+configurations are `WL = 16` for the blocks and `WL = 12`, Hann window, `ROUND = 1` for the top levels; other word
+lengths, windows and `ROUND = 0` need vectors generated for them. There is no synthesis, timing or power result.
 
 | File | Content |
 |---|---|

@@ -9,12 +9,14 @@ marked *paper*.
 
 | Layer | What exists | Evidence | Not verified |
 |---|---|---|---|
-| Python model (`python/btpsd`) | floating-point references and bit-accurate fixed-point models of the PSD and bispectrum paths | 69 tests, independent floating-point references, schedule properties | real EEG/EOG/EMG records (the paper's signals are not part of the repository) |
-| RTL control and addressing | line-by-line Python transliteration of the Verilog (`btpsd/rtlmodel.py`) | `tests/test_rtlmodel.py` (6 tests) | the Verilog text itself |
-| RTL (`rtl/`) | Verilog-2001 sources, six self-checking testbenches, golden vectors | structural lint (`scripts/lint_rtl.py`) | **never compiled or simulated**; no synthesis or timing result exists |
+| Python model (`python/btpsd`) | floating-point references and bit-accurate fixed-point models of the PSD and bispectrum paths | 73 tests, independent floating-point references, schedule properties | real EEG/EOG/EMG records (the paper's signals are not part of the repository) |
+| RTL control and addressing | line-by-line Python transliteration of the Verilog (`btpsd/rtlmodel.py`) | `tests/test_rtlmodel.py` (6 tests) | typing and syntax of the Verilog text (covered by the simulation below) |
+| RTL (`rtl/`) | Verilog-2001 sources, six self-checking testbenches, golden vectors | structural lint (`scripts/lint_rtl.py`); Icarus Verilog simulation (`make -C sim all`, CI): rotator 9216, butterfly 2048, squarer 1024 vectors, FFT 4 chunks at 207 cycles each, PSD 1024 bins, bispectrum 32 x 32 bins, all bit-exact to the model, including full-scale segments | other simulators and gate-level simulation; synthesis, timing and power; word lengths, windows and `ROUND = 0` other than the vectors' |
 
-The RTL was written without access to an HDL simulator. The testbenches and vectors are complete, so
-`make -C sim all` is the first real test; treat its output, not this document, as the verdict.
+The first simulation found two defects, both fixed: the rounded difference of the two extreme codes halves to one LSB
+above the largest code, which the model carried on while the RTL wrapped it (both now clamp, see section 2), and two
+testbenches read one vector past the end. The model defines the arithmetic; a testbench that passes shows that the
+Verilog follows it for the vectors it is given.
 
 ---
 
@@ -58,7 +60,8 @@ Everything below is bit-exact between `python/btpsd` and `rtl/`; the golden vect
 * **Butterfly scaling.** Every radix-2 add or subtract is immediately followed by `>> 1` (rounded), giving 1/8 per
   radix-8 butterfly and 1/512 for the 512-point FFT, and the result is clamped to `WL` bits. The clamp matters in
   one case only: the rounded difference of the two extreme codes, `(2^(WL-1) - 1) - (-2^(WL-1))`, halves to
-  `+2^(WL-1)`, one LSB above the largest code. The `(-j)` negation saturates in the same way.
+  `+2^(WL-1)`, one LSB above the largest code. The `(-j)` negation saturates as well; with `ROUND = 1` it cannot
+  overflow (the half difference is at least `-(2^(WL-1) - 1)`), so that saturation is reachable only with `ROUND = 0`.
 * **Rotation (CRU).** `y = x * exp(-j q pi/512)`, `q` in 0..1023:
   1. octant reduction: `quad = q >> 8`, `r = q & 255`; if `r > 128` then `quad += 1`, `r = 256 - r`;
   2. ROM entry `(a, b, inv)` for `r = 0..128` (129 entries, `inv` with 14 fraction bits, angle tolerance 0.01 rad);
@@ -119,6 +122,11 @@ functional reference of the datapath of Figs. 3-5 of the paper, not a throughput
 `mag_sq_odd.v` implements the sum-of-odds squarer (`SERIAL = 1`, `max(|re|, |im|) + 2` cycles) or a multiplier
 (`SERIAL = 0`). The cycle count of the serial squarer depends on the data (see `docs/PAPER_NOTES.md`, section 4).
 
+Simulated cost of the reference engine (`tb_psd_top`, `WL = 12`, serial squarer, 4 chunks of which the last two are
+full-scale): 836 cycles for the four FFT phases (209 each) and 115 462 cycles for the three segment phases, about
+38.5 k per segment, of which 21 757 cycles in total are squarer cycles of the model. The paper's overlapped design
+(Table 9: 1252 cycles latency) is a different architecture; the two are not comparable.
+
 Accumulator width: one power value is below `2^(2 WL - 1)`, so the worst case needs `2 WL + 1 + ceil(log2 S)` bits; the
 default `2 WL + 8` covers `S <= 128` segments in the worst case, real signals need far less.
 
@@ -136,7 +144,8 @@ and copied to the start of the next frame), runs the FFT core, and hands the fin
    `conj(F3)`, read-modify-write of the accumulator RAM (`BACCW = 2 WL + 10` bits, real and imaginary).
 
 By FSM inspection one frame costs roughly `32 * MAXB + 3 * MAXB + 4 * MAXB^2` cycles (about 5.2 k cycles for
-`MAXB = 32`); this is an unmeasured estimate until the testbench has run. Worst-case accumulator width is
+`MAXB = 32`); the testbench measures 5219 cycles per frame in the engine phase (209 more for the FFT phase). Worst-case
+accumulator width is
 `2 WL + 1 + ceil(log2 S)` bits (one product is below `2^(2 WL)` in magnitude), so the default `BACCW` covers
 `S <= 512` frames. `LOGB` is limited to 8 (a 9-bit bin address).
 
@@ -167,4 +176,15 @@ By FSM inspection one frame costs roughly `32 * MAXB + 3 * MAXB + 4 * MAXB^2` cy
 
 Regenerate everything generated (`rtl/cru_rom.v`, `rtl/btpsd_consts.vh`, all vectors) with `make -C sim vectors`.
 `btpsd/rtlmodel.py` re-implements the address, bank, twiddle, stall, write-back, tap and sign logic of the Verilog in
-Python and is tested against the model; it catches logic errors in the design but not Verilog typing or syntax errors.
+Python and is tested against the model; the Verilog text itself is checked by the simulation (`make -C sim all`, run by CI
+on every push). The top-level vectors end in full-scale, hard-clipped segments (`btpsd.vectors.clipped_tone`, the
+bispectrum signal amplified 2.5 times and clipped), on which the model clamps 4 (PSD) and 13 (bispectrum) rounded
+butterfly differences; `tests/test_vectors_stress.py` keeps that true.
+
+Which saturating paths the vectors reach (counted in the model): the rotator output saturates 4343 times in the rotator
+vectors, 72 times in the butterfly vectors and twice in the FFT vectors; the butterfly clamp fires once in the butterfly
+vectors and once in the FFT vectors, in addition to the stress segments above. The saturation of the merge and the
+windows (`rsat` in `psd_engine.v`, `rsat_win` in `bispectrum_engine.v`) is not reached by any vector: the Hann and
+Blackman window taps sum to 1 in magnitude (Hamming sums to 1.001), and the merge would take six neighbouring differences
+`D` of full-scale magnitude with matching signs, which none of the inputs approaches. The `(-j)`
+negation saturation is not reached either (`ROUND = 1`, see section 2).

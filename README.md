@@ -9,16 +9,19 @@ The design computes a 1024-bin power spectrum from overlapping 512-sample chunks
 memory-based radix-8 FFT, a 6-tap fractional-delay merge of the chunk spectra, a frequency-domain window and a
 sum-of-odds squarer, and a direct bispectrum `B(f1, f2) = F(f1) F(f2) F*(f1 + f2)` from the same FFT core.
 
-**Status.** The Python model is tested (69 tests). The RTL is complete but has **never been compiled or simulated**: it
-passes a structural lint, and its control logic was checked against the model through a Python transliteration. The
-first real test is `make -C sim all` (needs Icarus Verilog). No synthesis, timing or power result exists. The
-numbers of the paper are quoted as *paper*; everything measured here is *model* and uses synthetic signals.
+**Status.** The Python model is tested (73 tests). The RTL is simulated: `make -C sim all` compiles it with Icarus
+Verilog (`iverilog -g2005 -Wall`) and runs six self-checking testbenches, which match the golden vectors of the model bit
+for bit (rotator 9216 vectors, butterfly 2048, squarer 1024, FFT 4 chunks, PSD 1024 bins, bispectrum 32 x 32 bins).
+The PSD and bispectrum inputs end in full-scale, hard-clipped segments, on which the butterfly clamp fires inside the
+top-level runs. GitHub Actions repeats the simulation on every push. Not done: simulation with another simulator, synthesis,
+timing, power. The numbers of the paper are quoted as *paper*; everything measured here is *model* or *RTL simulation*
+and uses synthetic signals.
 
 | Part | Where | State |
 |---|---|---|
 | Floating-point references, fixed-point models, schedule model | `python/btpsd/` | tested |
-| Reference RTL (rotator, butterfly, FFT core, PSD and bispectrum engines) | `rtl/` | written, lint-clean, unsimulated |
-| Testbenches and golden vectors | `tb/`, `sim/` | complete, not yet run |
+| Reference RTL (rotator, butterfly, FFT core, PSD and bispectrum engines) | `rtl/` | simulated (Icarus Verilog), lint-clean; not synthesised |
+| Testbenches and golden vectors | `tb/`, `sim/` | 6 of 6 pass (`make sim`, CI) |
 | Experiments and figures | `results/`, `docs/figures/`, `docs/paper_figures/` | regenerable with `make experiments figures` |
 | Notes on the paper (findings, candidate errata) | `docs/PAPER_NOTES.md` | |
 | Architecture, arithmetic contract, differences from the paper | `docs/ARCHITECTURE.md` | |
@@ -61,11 +64,13 @@ formula and test signals are not fully specified (`docs/PAPER_NOTES.md`, section
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Proposed estimator | 0 | 4834 | 4420 | 205 Msps (R = 0.88) | 232 MHz | 191 mW | 1252 cycles |
 
-**Measured in this repository** (model on synthetic signals, 5 seeds; `results/`)
+**Measured in this repository** (model on synthetic signals, 5 seeds, `results/`; the RTL rows are cycle counts from the Icarus Verilog testbenches)
 
 | Quantity | Value |
 |---|---|
-| 512-point FFT, RTL pipeline (rotator 4, butterfly 10, loop latency 12) | 196 issue cycles + 11 = 207 cycles, 4 stall cycles (schedule model; the RTL transliteration gives the same, the RTL itself is unsimulated) |
+| 512-point FFT, RTL pipeline (rotator 4, butterfly 10, loop latency 12) | 196 issue cycles + 11 = 207 cycles, 4 stall cycles (schedule model); the testbench measures 207 cycles from the start edge to `done`, 209 per chunk in the FFT phase of the PSD and bispectrum top levels |
+| Bispectrum engine, 32 x 32 bins (RTL simulation) | 5219 cycles per frame (FSM count 5216), plus 209 for the FFT |
+| PSD segment engine (RTL simulation, serial squarer, vectors with a full-scale tail) | 115 462 cycles for 3 segments, 38.5 k per segment, of which 7.3 k are squarer cycles on average; a sequential reference engine, not comparable to the overlapped design of the paper |
 | Constant-rotator ROM, tolerance 0.01 rad | 129 entries, maximum angle error 0.0097 rad, 7.6 adders per rotation on average, 512-point FFT SNR 46.6 dB at WL = 16 |
 | Odd-bin accuracy of the 6-tap merge | 11.7 dB (analytic bound 11.74 dB); Table 3 of the paper reports 50.08 dB |
 | PSD SQNR against the exact Welch average, WL = 10 / 12 / 16 | white 15.4 / 23.9 / 23.5 dB; pink 28.4 / 31.9 / 29.0 dB; EEG-like 28.7 / 40.0 / 44.2 dB |
@@ -108,7 +113,7 @@ rotator, `fig07` window, squarer and accumulator, `fig08` bispectrum datapath, `
 python/btpsd/        models: fixedpoint, windows, fdfilter, reference (Welch), cordic (rotator ROM), r8fft + schedule,
                      squarer, estimator (PSD), bispectrum, rtlmodel (transliteration of the RTL), vectors, signals,
                      metrics, paperdata, viz
-python/tests/        69 unit tests
+python/tests/        73 unit tests
 python/scripts/      run_experiments, make_diagrams_a/b/c, make_plots, gen_cru_rom, gen_rtl, gen_vectors
 rtl/                 Verilog-2001 reference implementation (see rtl/README.md)
 tb/                  six self-checking testbenches
