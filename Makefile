@@ -7,7 +7,7 @@ PY ?= python3
 help:
 	@echo "test         unit tests of the Python model and of the RTL transliteration"
 	@echo "lint         structural check of the Verilog sources"
-	@echo "smoke        quick check of the whole repository: files, generated sources, vectors, models, Model Composer pack, lint, figures; the testbenches too if iverilog is installed"
+	@echo "smoke        check of the whole repository: files, generated sources, vectors, models, Model Composer pack, lint, figures (about 5 s); with iverilog installed the testbenches add about 4 minutes"
 	@echo "sim          RTL testbenches with Icarus Verilog (needs the golden vectors in sim/vectors)"
 	@echo "matrix       RTL against the model for 25 word-length, window, rounding and squarer variants (Icarus Verilog)"
 	@echo "vectors      regenerate rtl/cru_rom.v, rtl/btpsd_consts.vh and sim/vectors/*"

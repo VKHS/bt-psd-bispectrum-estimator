@@ -20,7 +20,7 @@ top-level runs. GitHub Actions repeats the simulation on every push, and `make m
 from the Verilog sources and from the simulation traces; the 32 figures of the paper are included with a manifest.
 `docs/FFT.md` explains the 512-point FFT down to its block diagram, `docs/MODEL_COMPOSER.md` drives the estimator from
 Simulink signal sources in Vitis Model Composer and from a signal generator inside the fabric, and `make smoke` checks
-the whole repository in seconds. Not done: simulation with another simulator, running the MATLAB, Simulink and Vivado
+the whole repository in seconds (about four minutes more when Icarus Verilog is installed and runs the testbenches). Not done: simulation with another simulator, running the MATLAB, Simulink and Vivado
 simulator parts of the Model Composer pack (there is no MATLAB or Vivado where this repository was written), synthesis,
 timing, power. The numbers of the paper are quoted as *paper*; everything measured here is *model* or *RTL simulation*
 and uses synthetic signals.
@@ -47,7 +47,7 @@ and uses synthetic signals.
 pip install -r requirements.txt     # numpy, scipy, matplotlib, pillow, pytest (tested with numpy 2.5, scipy 1.18, Python 3.13)
 make test          # unit tests of the model and of the RTL transliteration
 make lint          # structural check of the Verilog
-make smoke         # whole-repository check in seconds (the testbenches too if Icarus Verilog is installed)
+make smoke         # whole-repository check in seconds; with Icarus Verilog installed it also runs the testbenches (about four minutes)
 make sim           # RTL testbenches (Icarus Verilog); prints TB_RESULT: PASS/FAIL per testbench
 make matrix        # both top levels against the model for 25 configurations (Icarus Verilog; about ten minutes on a CI runner)
 make experiments   # results/*.csv from the models (about half a minute)
