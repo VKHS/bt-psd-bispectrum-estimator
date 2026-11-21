@@ -9,12 +9,14 @@ taken from the paper, and nothing was executed in MATLAB, Simulink or Model Comp
 """
 from __future__ import annotations
 
+import csv
+import json
 import re
 
 import numpy as np
 from matplotlib.patches import Rectangle
 
-from _common import FIGS, ROOT
+from _common import FIGS, RESULTS, ROOT
 from _sheet import card, labels, legend
 from btpsd import mcmodel as M
 from btpsd import rtlparse, siggen
@@ -288,6 +290,14 @@ def timeline(wl: int = 12, nchunks: int = 5, tone_bin: float = siggen.SELFTEST["
     return dict(cfg=cfg, res=res, pred=pred, phases=phases, x=x, pinc=pinc)
 
 
+def simulated_cycles():
+    """The clock cycles that the CI simulation printed (``results/rtl_mc_cycles.csv``) and the id of the run that printed them."""
+    with (RESULTS / "rtl_mc_cycles.csv").open() as f:
+        rows = {(r["testbench"], int(r["run"])): int(r["cycles"]) for r in csv.DictReader(f)}
+    run_id = json.loads((RESULTS / "rtl_sim_provenance.json").read_text())["run_id"]
+    return rows, run_id
+
+
 def _title(ax, s):
     ax.set_title(s, fontsize=5.2, color=INK2, loc="left", pad=2.4)
 
@@ -303,10 +313,15 @@ def fig31_wrapper_generator():
     p = F["params"]
     wl = int(p["wl"])
     T = timeline(wl, int(p["nchunks"]))
+    sim, run_id = simulated_cycles()
+    prd = M.testbench_cycle_predictions()
+    k0, k1, ks = ("tb_bt_psd_mc", 0), ("tb_bt_psd_mc", 1), ("tb_bt_psd_selftest", 0)
     W, H = 190, 210
     D = Diagram(W, H, "The record-and-replay wrapper, its run, and the test-signal generator",
                 subtitle="State machine, conditions, constants and ports are read from modelcomposer/hdl/*.v; the curves are the bit-accurate model on synthetic records (no measurement).\n"
-                         "The cycle counts in (b) are the model's PREDICTION (hatched), not a simulation result; tb/tb_bt_psd_mc.v prints the count that the RTL simulation takes.")
+                         "The cycle counts in (b) are the model's PREDICTION (hatched), not a simulation result; tb/tb_bt_psd_mc.v prints the count that the RTL simulation takes.\n"
+                         f"On the testbench records (Icarus Verilog, CI run {run_id}), cycles simulated / predicted: tb_bt_psd_mc {_n(sim[k0])} / {_n(prd[k0])} and "
+                         f"{_n(sim[k1])} / {_n(prd[k1])}, tb_bt_psd_selftest {_n(sim[ks])} / {_n(prd[ks])}.")
 
     # ============================== (a) wrapper internals ===========================================================
     AY, AH = 134.0, 58.0

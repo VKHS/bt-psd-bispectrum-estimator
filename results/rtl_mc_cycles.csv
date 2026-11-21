@@ -1,0 +1,4 @@
+testbench,run,measure,cycles
+tb_bt_psd_mc,0,cycles_from_start_to_done,120396
+tb_bt_psd_mc,1,cycles_from_start_to_done,124492
+tb_bt_psd_selftest,0,cycles_from_reset_to_done,109545

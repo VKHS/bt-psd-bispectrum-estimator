@@ -1,13 +1,14 @@
 """Turn the trace lines of a CI simulation log into the CSV files under ``results/``.
 
 The self-checking testbenches in ``tb/`` print ``TRACE``, ``OCC`` and ``HIST`` lines next to their pass/fail output
-(see the comments in the testbenches).  The simulator runs in GitHub Actions (job ``rtl-sim``); this script reads the
+(see the comments in the testbenches); the Model Composer testbenches print ``MC`` lines with the clock cycles to ``done``.  The simulator runs in GitHub Actions (job ``rtl-sim``); this script reads the
 downloaded log, checks that every testbench passed and writes
 
     results/rtl_trace_fft512.csv         per-cycle signals of the first 512-point transform
     results/rtl_trace_squarer.csv        per-cycle signals of three squarer examples
     results/rtl_state_occupancy.csv      cycles per state of the top levels and engines (whole testbench run)
     results/rtl_squarer_wait_hist.csv    residence time of the PSD engine in W_S, binned by floor(log2(cycles))
+    results/rtl_mc_cycles.csv            clock cycles to ``done`` of the Model Composer wrapper and of the self-test
     results/rtl_sim_provenance.json      where the numbers come from
 
 Usage::
@@ -30,8 +31,10 @@ from _common import RESULTS
 from btpsd.rtlparse import RTL_DIR, parse_all
 
 LINE = re.compile(r"Z (TRACE|OCC|HIST),(.*?)\s*$")
-EXPECTED_TESTBENCHES = ["tb_bispectrum_top", "tb_cru_rotate", "tb_fft512_mem", "tb_mag_sq_odd", "tb_psd_top",
-                        "tb_r8_butterfly"]
+MC_RUN = re.compile(r"Z MC,run,(\d+),cycles_from_start_to_done,(\d+)\s*$")
+MC_SELFTEST = re.compile(r"Z MC,selftest,cycles_from_reset_to_done,(\d+)\s*$")
+EXPECTED_TESTBENCHES = ["tb_bispectrum_top", "tb_bt_psd_mc", "tb_bt_psd_selftest", "tb_cru_rotate", "tb_fft512_mem",
+                        "tb_mag_sq_odd", "tb_psd_top", "tb_r8_butterfly", "tb_sig_gen"]
 MODULE_OF = {"psd_top": "bt_psd_top", "psd_engine": "psd_engine", "bsp_top": "bt_bispectrum_top",
              "bsp_engine": "bispectrum_engine"}
 
@@ -55,7 +58,17 @@ def main() -> int:
 
     text = args.log.read_text(errors="replace")
     fft, sq, occ, hist = [], [], [], []
+    mc_run: dict[int, list[int]] = {}  # tb_bt_psd_mc runs twice in the CI (sources and bundle): the counts must agree
+    selftest: list[int] = []
     for ln in text.splitlines():
+        m = MC_RUN.search(ln)
+        if m:
+            mc_run.setdefault(int(m.group(1)), []).append(int(m.group(2)))
+            continue
+        m = MC_SELFTEST.search(ln)
+        if m:
+            selftest.append(int(m.group(1)))
+            continue
         m = LINE.search(ln)
         if not m:
             continue
@@ -77,6 +90,9 @@ def main() -> int:
     if not (fft and sq and occ and hist):
         print("the log has no trace lines", file=sys.stderr)
         return 1
+    if sorted(mc_run) != [0, 1] or len(selftest) != 1 or any(len(set(v)) != 1 for v in mc_run.values()):
+        print(f"the log has no consistent MC cycle lines: runs {mc_run}, self-test {selftest}", file=sys.stderr)
+        return 1
 
     mods = parse_all(RTL_DIR)
     fft_states = {v: k for k, v in mods["fft512_mem"].states.items()}
@@ -90,6 +106,9 @@ def main() -> int:
     _write(RESULTS / "rtl_state_occupancy.csv", ["testbench", "module", "state_value", "state", "cycles"], rows)
     _write(RESULTS / "rtl_squarer_wait_hist.csv", ["log2_bin", "cycles_from", "cycles_to", "bins"],
            [[k, 2 ** k, 2 ** (k + 1) - 1, n] for k, n in hist])
+    _write(RESULTS / "rtl_mc_cycles.csv", ["testbench", "run", "measure", "cycles"],
+           [["tb_bt_psd_mc", r, "cycles_from_start_to_done", mc_run[r][0]] for r in sorted(mc_run)]
+           + [["tb_bt_psd_selftest", 0, "cycles_from_reset_to_done", selftest[0]]])
 
     took = sorted({int(v) for v in re.findall(r"transform took (\d+) cycles", text)})
     prov = {
@@ -110,6 +129,9 @@ def main() -> int:
             "rtl_state_occupancy.csv": "tb_psd_top (WL = 12, 4 chunks, 3 segments, one clear) and tb_bispectrum_top "
                                        "(WL = 12, 5 frames, one clear), cycles per state from reset release to the last result",
             "rtl_squarer_wait_hist.csv": "tb_psd_top, bins by floor(log2(cycles in W_S)) per visit",
+            "rtl_mc_cycles.csv": "tb_bt_psd_mc (WL = 12, 4 chunks; run 0: a sample in every cycle, run 1: a sample every third "
+                                 "cycle, counted from the first idle cycle of the feed loop; the run on the sources and the run "
+                                 "on the include-free bundle print the same counts) and tb_bt_psd_selftest (counted from reset)",
         },
     }
     out = RESULTS / "rtl_sim_provenance.json"

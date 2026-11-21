@@ -25,8 +25,8 @@ def _rows(name):
 
 def test_provenance():
     p = json.loads((RESULTS / "rtl_sim_provenance.json").read_text())
-    assert p["testbenches_passed"] == ["tb_bispectrum_top", "tb_cru_rotate", "tb_fft512_mem", "tb_mag_sq_odd", "tb_psd_top",
-                                       "tb_r8_butterfly"]
+    assert p["testbenches_passed"] == ["tb_bispectrum_top", "tb_bt_psd_mc", "tb_bt_psd_selftest", "tb_cru_rotate",
+                                       "tb_fft512_mem", "tb_mag_sq_odd", "tb_psd_top", "tb_r8_butterfly", "tb_sig_gen"]
     assert len(p["commit"]) == 40 and p["run_url"].endswith(str(p["run_id"]))
     assert p["fft512_first_issue_to_done_cycles"] == [rtlmodel.LAT - 1 + 3 * 64 + rtlmodel.stall_cycles(rtlmodel.LAT)]
 
@@ -102,3 +102,24 @@ def test_squarer_wait_histogram_equals_model():
     model = rtlmodel.squarer_wait_histogram(res.X_re, res.X_im, p["cfg"].squarer_units)
     simulated = {int(r["log2_bin"]): int(r["bins"]) for r in _rows("rtl_squarer_wait_hist.csv")}
     assert model == simulated
+
+
+def test_model_composer_cycles_equal_the_prediction():
+    """The clock cycles to ``done`` that the RTL simulation printed are the ones ``btpsd.mcmodel`` predicts for the same records.
+
+    The prediction of run 0 of ``tb_bt_psd_mc`` was made from the model before the simulation had been run; the offsets of the
+    other two follow from how the testbenches count (see ``mcmodel.testbench_cycle_predictions``).  This test keeps prediction
+    and measurement together, so a change of the model or of the RTL that moves either number shows up here.
+    """
+    from btpsd import mcmodel as M
+
+    rows = {(r["testbench"], int(r["run"])): (r["measure"], int(r["cycles"])) for r in _rows("rtl_mc_cycles.csv")}
+    want = M.testbench_cycle_predictions(VECTORS)
+    assert set(rows) == set(want) == {("tb_bt_psd_mc", 0), ("tb_bt_psd_mc", 1), ("tb_bt_psd_selftest", 0)}
+    assert {k: v[0] for k, v in rows.items()} == {("tb_bt_psd_mc", 0): "cycles_from_start_to_done",
+                                                  ("tb_bt_psd_mc", 1): "cycles_from_start_to_done",
+                                                  ("tb_bt_psd_selftest", 0): "cycles_from_reset_to_done"}
+    assert {k: v[1] for k, v in rows.items()} == want
+    d = define_values(VECTORS / "psd_wl12.vh")
+    assert M.expected(M._signed_words(VECTORS / "psd_wl12_x.mem", 12), M.McConfig(wl=12, nchunks=d["PSD_NCHUNKS"])).squarer_cycles == d["PSD_SQUARER_CYCLES"]
+    assert want[("tb_bt_psd_mc", 1)] - want[("tb_bt_psd_mc", 0)] == 2 * d["PSD_NCHUNKS"] * 512

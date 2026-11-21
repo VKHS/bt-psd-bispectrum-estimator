@@ -22,7 +22,9 @@ with ``N = 512 C`` the record, ``C`` chunks, ``S = C - 1`` segments, ``T_FFT = 2
 sum-of-odds squarer (``PsdResult.squarer_cycles``).  ``T_FFT`` and ``T_SEG_EXTRA`` are read off the CI measurement of
 ``tb_psd_top`` (``results/rtl_state_occupancy.csv``: 836 cycles in ``T_FFT`` for 4 chunks, 115 462 cycles in ``T_SEG``
 for 3 segments against 115 456 in the engine states); the handshake of the wrapper adds the final ``+ 2``.  The testbench
-``tb/tb_bt_psd_mc.v`` prints the cycle count that the simulation really takes (``MC,run,0,cycles_from_start_to_done``).
+``tb/tb_bt_psd_mc.v`` prints the cycle count that the simulation really takes (``MC,run,0,cycles_from_start_to_done``);
+``results/rtl_mc_cycles.csv`` holds the counts of the CI run and :func:`testbench_cycle_predictions` the prediction for the same
+records, which ``python/tests/test_sim_results.py`` compares.
 """
 from __future__ import annotations
 
@@ -34,7 +36,8 @@ from .estimator import HwConfig, PsdResult, hw_power_scale, psd_exact_welch, psd
 from .rtlmodel import psd_engine_state_cycles
 
 __all__ = ["CHUNK", "BINS", "T_FFT_PER_CHUNK", "T_SEG_EXTRA", "McConfig", "gateway_codes", "codes_to_gateway_values", "expected",
-           "expected_cycles", "recommended_stop", "decode_spectrum", "check_logs", "RunCheck", "captured_record"]
+           "expected_cycles", "recommended_stop", "testbench_cycle_predictions", "decode_spectrum", "check_logs", "RunCheck",
+           "captured_record"]
 
 CHUNK = 512
 BINS = 1024
@@ -154,6 +157,40 @@ def recommended_stop(res: PsdResult, cfg: McConfig | None = None, margin: int = 
     """Simulation length in clock cycles that covers the predicted ``done`` plus 2 % and a read-out window of ``margin`` cycles."""
     p = expected_cycles(res, cfg)
     return int(np.ceil(p * 1.02)) + int(margin)
+
+
+def _signed_words(path, wl: int) -> np.ndarray:
+    """Signed integers of a ``$readmemh`` file of ``wl``-bit words."""
+    from pathlib import Path
+
+    v = np.array([int(w, 16) for w in Path(path).read_text().split()], dtype=np.int64)
+    return np.where(v >> (wl - 1), v - (1 << wl), v)
+
+
+def testbench_cycle_predictions(vectors_dir=None) -> dict:
+    """Predicted cycle counts of the runs that ``tb_bt_psd_mc`` and ``tb_bt_psd_selftest`` print, keyed ``(testbench, run)``.
+
+    * ``("tb_bt_psd_mc", 0)``: the record of ``tb_psd_top`` (word length 12, four chunks, Hann) with a sample in every cycle,
+      counted from the first sample: :func:`expected_cycles`;
+    * ``("tb_bt_psd_mc", 1)``: the same record with two idle cycles in front of every sample, counted from the first idle
+      cycle, so the capture takes ``3 N`` instead of ``N`` cycles: ``+ 2 N``;
+    * ``("tb_bt_psd_selftest", 0)``: the self-test record counted from reset, and ``sig_gen`` presents its first valid sample two
+      enabled clock edges after reset: ``+ 2``.
+
+    The values are predictions of the model; ``results/rtl_mc_cycles.csv`` holds what the RTL simulation printed.
+    """
+    from pathlib import Path
+
+    from . import siggen
+
+    vdir = Path(vectors_dir) if vectors_dir is not None else Path(__file__).resolve().parents[2] / "sim" / "vectors"
+    cfg = McConfig(wl=12, nchunks=4)
+    res = expected(_signed_words(vdir / "psd_wl12_x.mem", 12), cfg)
+    base = expected_cycles(res, cfg)
+    rec = siggen.selftest_record()
+    cfg_st = McConfig(wl=rec["wl"], nchunks=rec["nchunks"])
+    st = expected_cycles(expected(rec["x"], cfg_st), cfg_st)
+    return {("tb_bt_psd_mc", 0): base, ("tb_bt_psd_mc", 1): base + 2 * cfg.nsamp, ("tb_bt_psd_selftest", 0): st + 2}
 
 
 # ---------------------------------------------------------------------------

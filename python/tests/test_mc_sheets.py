@@ -216,6 +216,18 @@ def test_fig31_labels_the_timeline_as_a_prediction(drawn):
     assert mf._n(T["res"].squarer_cycles) in t
 
 
+def test_fig31_quotes_the_simulated_and_the_predicted_cycles_of_the_testbenches(drawn):
+    """The subtitle prints both numbers for each testbench run, taken from the stored CI results and from the model."""
+    _, _, d31 = drawn
+    t = _texts(d31)
+    sim, run_id = mf.simulated_cycles()
+    prd = M.testbench_cycle_predictions()
+    assert set(sim) == set(prd)
+    assert f"CI run {run_id}" in t and "Icarus Verilog" in t
+    for k in sim:
+        assert f"{mf._n(sim[k])} / {mf._n(prd[k])}" in t, k
+
+
 def test_fig31_names_the_states_conditions_and_generator_constants(drawn):
     _, _, d31 = drawn
     t = _texts(d31)
