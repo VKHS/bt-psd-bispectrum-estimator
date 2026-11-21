@@ -61,7 +61,7 @@ lives in this repository. Columns: **Model** = `python/btpsd`, **RTL** = `rtl/` 
 ## Figures
 
 The paper's 32 figures are in `docs/paper_figures/`; the manifest there names, for each figure, the page and the
-counterpart drawn in this repository. The 23 sheets of `docs/figures/` are drawn from the model, from the Verilog sources
+counterpart drawn in this repository. The 31 sheets of `docs/figures/` are drawn from the model, from the Verilog sources
 and from the simulation traces; `docs/figures/README.md` lists them with their scripts and their data basis.
 
 ## Beyond the paper: the RTL
@@ -75,5 +75,19 @@ checked:
 | control state machines | `bt_psd_top.v`, `bt_bispectrum_top.v`, `fft512_mem.v`, `psd_engine.v`, `bispectrum_engine.v` | `fig16`, `fig17` | `tests/test_rtl_structure.py` (every drawn transition is in the Verilog) |
 | pipeline latencies, issue stall of the FFT core | `cru_rotate.v`, `r8_butterfly.v`, `fft512_mem.v` | `fig18` | `tests/test_rtlmodel.py` (`write_back_slack`: the stall of 4 cycles is the smallest that avoids a read-after-write hazard) |
 | handshakes and cycle counts as simulated | testbenches in `tb/` | `fig19`, `fig20` | `tests/test_sim_results.py` (traces and state occupancy against the model formulas), `results/rtl_*.csv`, `results/rtl_sim_provenance.json` |
-| bit-exact agreement of RTL and model | `make -C sim all` (CI) | | six testbenches, golden vectors in `sim/vectors` |
+| bit-exact agreement of RTL and model | `make -C sim all` (CI) | | nine testbenches (six for the estimator, three for the Model Composer pack), golden vectors in `sim/vectors` |
 | the same for 25 further configurations of the top levels (WL 10 to 16, four windows, ROUND 0 and 1, serial and multiplier squarer) | `make -C sim matrix` (CI job `rtl-matrix`) | `fig23` | `tests/test_rtl_matrix.py`, `results/rtl_config_matrix.csv` |
+
+## Beyond the paper: the FFT study, the Model Composer pack and the smoke test
+
+The paper gives the architecture of the FFT and of the estimators; these parts are additions of the repository.
+
+| Topic | Where | Sheet | Check |
+|---|---|---|---|
+| the 512-point memory-based FFT: transform, address map, block diagram, control and timing, twiddles, accuracy | `docs/FFT.md`, `btpsd/fftstudy.py`, `rtl/fft512_mem.v` | `fig24` to `fig28` | `tests/test_fft_study.py`, `tests/test_fft_sheets.py`, `results/model_fft_accuracy.csv` |
+| leakage, resolution and spread of the averaged estimate; hardware model against the exact Welch average | `btpsd/spectralstudy.py` | `fig29` | `tests/test_spectral_study.py`, `results/model_spectral_study.csv` |
+| the estimator in Vitis Model Composer: Black Box wrapper, Simulink bench with signal-generator sources, in-fabric generator and self-test | `modelcomposer/`, `docs/MODEL_COMPOSER.md`, `btpsd/mcmodel.py`, `btpsd/siggen.py` | `fig30`, `fig31` | `make -C sim mc mcb sg st` (CI), `tests/test_mcmodel.py`, `tests/test_siggen.py`, `tests/test_gen_mc.py`, `tests/test_mc_docs.py`, `results/rtl_mc_cycles.csv` |
+| repository smoke test | `btpsd/smoke.py`, `python/scripts/smoke_test.py`, `sim/xsim_smoke.sh` | | `tests/test_smoke.py`, CI job `smoke` |
+
+The MATLAB and Simulink scripts of the pack and the Vivado simulator script have not been executed; see section 10 of
+`docs/MODEL_COMPOSER.md`.

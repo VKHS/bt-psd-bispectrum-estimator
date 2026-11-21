@@ -11,22 +11,30 @@ The design computes a 1024-bin power spectrum from overlapping 512-sample chunks
 memory-based radix-8 FFT, a 6-tap fractional-delay merge of the chunk spectra, a frequency-domain window and a
 sum-of-odds squarer, and a direct bispectrum `B(f1, f2) = F(f1) F(f2) F*(f1 + f2)` from the same FFT core.
 
-**Status.** The Python model is tested (131 tests). The RTL is simulated: `make -C sim all` compiles it with Icarus
-Verilog (`iverilog -g2005 -Wall`) and runs six self-checking testbenches, which match the golden vectors of the model bit
-for bit (rotator 9216 vectors, butterfly 2048, squarer 1024, FFT 4 chunks, PSD 1024 bins, bispectrum 32 x 32 bins).
+**Status.** The Python model is tested (380 tests). The RTL is simulated: `make -C sim all` compiles it with Icarus
+Verilog (`iverilog -g2005 -Wall`) and runs nine self-checking testbenches, which match the golden vectors of the model bit
+for bit: six for the estimator (rotator 9216 vectors, butterfly 2048, squarer 1024, FFT 4 chunks, PSD 1024 bins, bispectrum
+32 x 32 bins) and three for the Model Composer pack (record-and-replay wrapper, test-signal generator, in-fabric self-test).
 The PSD and bispectrum inputs end in full-scale, hard-clipped segments, on which the butterfly clamp fires inside the
-top-level runs. GitHub Actions repeats the simulation on every push, and `make matrix` (CI job `rtl-matrix`) runs both top levels for 25 further configurations (word length 10 to 16, the four windows, rounding and truncation, serial and multiplier squarer), all bit-exact to the model. Twenty-three figure sheets are drawn from the models,
-from the Verilog sources and from the simulation traces; the 32 figures of the paper are included with a manifest. Not
-done: simulation with another simulator, synthesis, timing, power. The numbers of the paper are quoted as *paper*; everything measured here is *model* or *RTL simulation*
+top-level runs. GitHub Actions repeats the simulation on every push, and `make matrix` (CI job `rtl-matrix`) runs both top levels for 25 further configurations (word length 10 to 16, the four windows, rounding and truncation, serial and multiplier squarer), all bit-exact to the model. Thirty-one figure sheets are drawn from the models,
+from the Verilog sources and from the simulation traces; the 32 figures of the paper are included with a manifest.
+`docs/FFT.md` explains the 512-point FFT down to its block diagram, `docs/MODEL_COMPOSER.md` drives the estimator from
+Simulink signal sources in Vitis Model Composer and from a signal generator inside the fabric, and `make smoke` checks
+the whole repository in seconds. Not done: simulation with another simulator, running the MATLAB, Simulink and Vivado
+simulator parts of the Model Composer pack (there is no MATLAB or Vivado where this repository was written), synthesis,
+timing, power. The numbers of the paper are quoted as *paper*; everything measured here is *model* or *RTL simulation*
 and uses synthetic signals.
 
 | Part | Where | State |
 |---|---|---|
 | Floating-point references, fixed-point models, schedule model | `python/btpsd/` | tested |
 | Reference RTL (rotator, butterfly, FFT core, PSD and bispectrum engines) | `rtl/` | simulated (Icarus Verilog), lint-clean; not synthesised |
-| Testbenches and golden vectors | `tb/`, `sim/` | 6 of 6 pass (`make sim`, CI); 25 of 25 configurations (`make matrix`, CI) |
+| Testbenches and golden vectors | `tb/`, `sim/` | 9 of 9 pass (`make sim`, CI; the wrapper testbench runs on the sources and on the bundle); 25 of 25 configurations (`make matrix`, CI) |
+| Smoke test: files, generated sources, vectors, models, Model Composer pack, lint, testbenches, figures | `python/scripts/smoke_test.py`, `make smoke` | CI job `smoke`; the Vivado simulator script `sim/xsim_smoke.sh` is not executed |
 | Experiments (model on synthetic signals; RTL simulation data with provenance) | `results/` (`results/README.md`) | `make experiments` |
-| Figure sheets, 23 (architecture, RTL, simulation, windows, PSD examples, bispectra) | `docs/figures/` (`docs/figures/README.md`) | `make figures`; byte-identical on re-runs |
+| Figure sheets, 31 (architecture, RTL, simulation, windows, PSD examples, bispectra, FFT, spectral study, Model Composer) | `docs/figures/` (`docs/figures/README.md`) | `make figures`; byte-identical on re-runs |
+| The 512-point FFT: mathematics, address map, block diagram, pass snapshots, twiddles, fixed-point accuracy | `docs/FFT.md`, `docs/figures/fig24` to `fig28` | model, Verilog, simulation traces |
+| Model Composer pack: Black Box wrapper, Simulink bench with signal-generator sources, in-fabric test-signal generator and self-test | `modelcomposer/`, `docs/MODEL_COMPOSER.md`, `fig30`, `fig31` | Verilog simulated (Icarus), cycles equal the model's prediction; MATLAB, Simulink and Vivado simulator parts not executed |
 | The 32 figures of the paper, with the counterpart sheet of each | `docs/paper_figures/` | manifest and rights note in its `README.md` |
 | Notes on the paper (findings, candidate errata) | `docs/PAPER_NOTES.md` | |
 | Paper-to-code map: sections, equations (1)-(32), tables 1-10, figures 1-32 | `docs/PAPER_TO_CODE.md` | complete |
@@ -39,10 +47,11 @@ and uses synthetic signals.
 pip install -r requirements.txt     # numpy, scipy, matplotlib, pillow, pytest (tested with numpy 2.5, scipy 1.18, Python 3.13)
 make test          # unit tests of the model and of the RTL transliteration
 make lint          # structural check of the Verilog
+make smoke         # whole-repository check in seconds (the testbenches too if Icarus Verilog is installed)
 make sim           # RTL testbenches (Icarus Verilog); prints TB_RESULT: PASS/FAIL per testbench
 make matrix        # both top levels against the model for 25 configurations (Icarus Verilog; about ten minutes on a CI runner)
 make experiments   # results/*.csv from the models (about half a minute)
-make figures       # docs/figures/* (23 sheets; fig19, fig20 and fig23 read results/rtl_*.csv)
+make figures       # docs/figures/* (31 sheets; fig19, fig20, fig23 and fig31 read results/rtl_*.csv)
 ```
 
 ```python
@@ -60,6 +69,30 @@ Bxy = B.bispectrum_hw_to_float(re, im, 12, S, shift)          # 32 x 32 bispectr
 ```
 
 The Vivado script `fpga/synth_ooc.tcl` (untested) produces out-of-context utilisation and timing reports.
+
+## Signal generators and Vitis Model Composer
+
+`modelcomposer/` wraps the estimator as a Black Box for AMD Vitis Model Composer (formerly System Generator for DSP) and
+feeds it from Simulink signal sources (Signal Generator, Sine Wave with Random Number, Chirp Signal, From Workspace) through
+Gateway In blocks. Because a Black Box has no back-pressure, `bt_psd_mc` records the samples and replays them into
+`bt_psd_top`. A small generator written in Verilog (`sig_gen.v`: phase accumulator, sine table, LFSR noise) does the same
+job inside the fabric, so the estimator can be exercised in the Vivado simulator or on a board without MATLAB. The guide
+`docs/MODEL_COMPOSER.md` has the block-by-block bench, the Black Box interface, the AMD DDS Compiler recipe, the expected
+spectrum and the clock cycles to `done` (predicted by the model and equal to what the simulation prints).
+
+```bash
+python3 python/scripts/export_mc_stimulus.py --source tone   # a stimulus file and the expected spectrum words
+make -C sim sg st mc mcb                                     # generator, self-test and wrapper testbenches (Icarus Verilog)
+bash sim/xsim_smoke.sh sg st mc mcb                          # the same in the Vivado simulator (not executed here)
+```
+
+```matlab
+>> addpath('modelcomposer/matlab'); mdl = bt_mc_build('sine'); res = bt_mc_run(mdl);   % in MATLAB started through Model Composer
+```
+
+What was run: the Verilog (Icarus Verilog, in CI) and the Python tools. What was not: the MATLAB scripts, Simulink, Model
+Composer and the Vivado simulator, because none of them is available where this repository was written; the guide lists
+what is established and what is not.
 
 ## Results
 
@@ -87,6 +120,7 @@ formula and test signals are not fully specified (`docs/PAPER_NOTES.md`, section
 | RTL against the model, 25 configurations (RTL simulation, `fig23`) | all bit-exact: PSD (16) and bispectrum (9) top levels at WL = 10 to 16, four windows, ROUND = 1 and 0, serial and multiplier squarer; with rounding the vectors reach the butterfly clamp 4 (PSD) and 13 (bispectrum) times |
 | Periodic windows, equivalent noise bandwidth (bins) and peak sidelobe, rectangular / Hann / Hamming / Blackman (`fig21`) | 1.000 / 1.500 / 1.363 / 1.727 and -13.3 / -31.5 / -42.7 / -58.1 dB; the frequency-domain kernels of 1 / 3 / 3 / 5 bins are exact |
 | PSD at WL = 10 on the 5120-sample records of `fig22`: SQNR against the float Welch average, EEG-like / AR(2) narrow-band / white | 27.8 / 18.1 / 12.9 dB; one LSB of the PSD word is -21.6 dB, so low-power bins quantise to zero (119 and 200 of 513 bins for the first two signals) |
+| Model Composer wrapper, clock cycles to `done`: RTL simulation / model prediction (`results/rtl_mc_cycles.csv`) | PSD record, 4 chunks: 120 396 / 120 396; the same with a sample every third cycle: 124 492 / 124 492; self-test record, from reset: 109 545 / 109 545 |
 
 Reading the table: from WL = 14 the PSD SQNR is set by the merge, not by the word length, because six taps keep
 about 93 % of the interpolation kernel energy. `docs/PAPER_NOTES.md` explains this, lists what the paper leaves open,
@@ -95,7 +129,7 @@ Figs. 13-15 are drawn with symmetric windows, whose frequency-domain kernel is n
 
 ## Figures
 
-The 23 sheets in `docs/figures/` (PNG for reading, SVG for editing) are drawn by `python/scripts/make_*.py`; each one is
+The 31 sheets in `docs/figures/` (PNG for reading, SVG for editing) are drawn by `python/scripts/make_*.py`; each one is
 based on the model, on the Verilog sources or on the simulation traces, never on a mixture on one number
 (`docs/figures/README.md` lists script and basis of every sheet). The paper's own figures are in `docs/paper_figures/`
 (manifest and rights note in that folder's `README.md`).
@@ -131,6 +165,24 @@ based on the model, on the Verilog sources or on the simulation traces, never on
 | ![Window responses](docs/figures/fig21_window_responses.png) | ![PSD examples](docs/figures/fig22_psd_examples.png) |
 | `fig21` the four windows: kernels, responses, figures of merit | `fig22` records and WL = 10 PSD against the float Welch average |
 
+**The FFT** (`docs/FFT.md`)
+
+| | |
+|---|---|
+| ![FFT index space](docs/figures/fig24_fft_index_space.png) | ![FFT pass snapshots](docs/figures/fig25_fft_pass_snapshots.png) |
+| `fig24` index cubes, address digits, bank map, factorisation | `fig25` memory contents after the load and after each pass |
+| ![FFT core block diagram](docs/figures/fig26_fft_core_blocks.png) | ![Twiddle atlas](docs/figures/fig27_twiddle_atlas.png) |
+| `fig26` block diagram of the FFT core at signal level, butterfly pipeline | `fig27` twiddle factors of each pass, rotation counts, ROM error |
+| ![FFT accuracy](docs/figures/fig28_fft_accuracy.png) | ![Spectral study](docs/figures/fig29_spectral_study.png) |
+| `fig28` fixed-point accuracy against word length, rounding and per-pass error | `fig29` tone between bins, leakage, two-tone resolution, the hardware model against the exact Welch average |
+
+**Model Composer** (`docs/MODEL_COMPOSER.md`)
+
+| | |
+|---|---|
+| ![Model Composer bench](docs/figures/fig30_mc_test_bench.png) | ![Wrapper and generator](docs/figures/fig31_mc_wrapper_generator.png) |
+| `fig30` the Simulink bench, how a run is checked, the Black Box interface | `fig31` record-and-replay wrapper, predicted cycle timeline, in-fabric generator and its spectrum |
+
 Also in `docs/figures/`: `fig03` radix-8 butterfly network, `fig04` segment merge, `fig05` six-tap filter, `fig06`
 rotator, `fig07` window, squarer and accumulator, `fig08` bispectrum datapath, `fig11` fractional-delay kernels,
 `fig14` bispectrum views.
@@ -148,20 +200,28 @@ rotator, `fig07` window, squarer and accumulator, `fig08` bispectrum datapath, `
 ```text
 python/btpsd/        models: fixedpoint, windows, fdfilter, reference (Welch), cordic (rotator ROM), r8fft + schedule,
                      squarer, estimator (PSD), bispectrum, rtlmodel (transliteration of the RTL), vectors, signals,
-                     metrics, paperdata, rtlparse (reads the Verilog), viz
-python/tests/        131 tests: model, RTL transliteration, structure of the Verilog, simulation results, figure data, configuration matrix
+                     metrics, paperdata, rtlparse (reads the Verilog), viz; fftstudy, spectralstudy (the studies behind
+                     fig24 to fig29); mcmodel, siggen (Model Composer wrapper and test-signal generator); smoke
+python/tests/        380 tests: model, RTL transliteration, structure of the Verilog, simulation results, figure data,
+                     configuration matrix, Model Composer pack and its guide, smoke test
 python/scripts/      run_experiments; make_diagrams_a/b/c, make_plots, make_rtl_figures, make_sim_figures,
-                     make_signal_figures (the figure sheets); run_rtl_matrix (25 configurations against the model);
+                     make_signal_figures, make_fft_figures, make_spectral_figures, make_mc_figures (the figure sheets);
+                     run_rtl_matrix (25 configurations against the model); smoke_test;
                      ingest_ci_traces, ingest_ci_matrix (simulation output -> results/);
+                     gen_mc, export_mc_stimulus, compare_mc_result (Model Composer pack);
                      measure_paper_window_stems; gen_cru_rom, gen_rtl, gen_vectors, extract_paper_tables
 rtl/                 Verilog-2001 reference implementation (see rtl/README.md)
-tb/                  six self-checking testbenches
-sim/                 Makefile for Icarus Verilog (all, matrix), golden vectors (sim/vectors, see its README.md)
+modelcomposer/       Black Box wrapper, in-fabric signal generator and self-test (hdl/), Simulink bench scripts (matlab/);
+                     see its README.md and docs/MODEL_COMPOSER.md
+tb/                  nine self-checking testbenches (six for the estimator, three for the Model Composer pack)
+sim/                 Makefile for Icarus Verilog (all, matrix), xsim_smoke.sh for the Vivado simulator (not executed),
+                     golden vectors (sim/vectors, see its README.md)
 scripts/lint_rtl.py  structural check of the Verilog sources
 fpga/                out-of-context Vivado synthesis script (untested)
 data/                the ten tables of the paper as printed, values read from its figures, generated ROM tables
 results/             model experiments (provenance.json) and RTL simulation data (rtl_*.csv, rtl_sim_provenance.json)
-docs/                ARCHITECTURE.md, PAPER_NOTES.md, PAPER_TO_CODE.md, figures/ (23 sheets), paper_figures/ (32)
+docs/                ARCHITECTURE.md, FFT.md, MODEL_COMPOSER.md, PAPER_NOTES.md, PAPER_TO_CODE.md, figures/ (31 sheets),
+                     paper_figures/ (32)
 CITATION.cff         how to cite the article
 legacy/              the original files of the repository, unchanged (legacy/README.md)
 ```
@@ -175,9 +235,12 @@ The original files of the repository are kept unchanged in `legacy/`; the mainta
    paper's overlapped design, verification map.
 2. `docs/PAPER_NOTES.md` - findings on the paper's claims, SQNR definitions, squarer throughput, candidate errata.
 3. `docs/PAPER_TO_CODE.md` - every section, equation, table and figure of the paper and where it lives here.
-4. `docs/figures/README.md`, `docs/paper_figures/README.md` - the 23 sheets with their basis, the paper's 32 figures.
+4. `docs/figures/README.md`, `docs/paper_figures/README.md` - the 31 sheets with their basis, the paper's 32 figures.
 5. `results/README.md` - which file is model output, which is RTL simulation output, and how each is produced.
 6. `rtl/README.md`, `sim/vectors/README.md`, `data/README.md` - RTL files, parameters, vector formats, tables.
+7. `docs/FFT.md` - the 512-point memory-based FFT: mathematics, address map, block diagram, timing, twiddles, accuracy.
+8. `docs/MODEL_COMPOSER.md`, `modelcomposer/README.md` - the Black Box, the Simulink bench, the signal generators, the
+   expected results and the clock cycles; what was run and what was not.
 
 ## Citing
 

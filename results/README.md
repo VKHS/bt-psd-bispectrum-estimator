@@ -20,6 +20,11 @@ power domain with the analytic output scale (no fitting).
 | `squarer_cycle_model.csv` | serial squarer cycles per segment and squarers needed for R = 0.88 | `exp_cycle_model` |
 | `model_sqnr_wl10_synthetic.csv` | SQNR at WL = 10 for four signals and four windows | `exp_wl10_windows` |
 | `model_psd_examples_wl10.csv` | the numbers printed on `docs/figures/fig22_psd_examples` (one record per signal class) | `python/scripts/make_signal_figures.py` |
+| `model_fft_accuracy.csv` | SQNR of the fixed-point 512-point FFT against the exact transform for several inputs, word lengths and rounding modes, with the SQNR that the error model predicts (the `predicted` columns are formulas, not measurements) | `python/scripts/make_fft_figures.py` |
+| `model_spectral_study.csv` | long-format table `study, window, model, x, y` behind `docs/figures/fig29_spectral_study` (tone between two bins, leakage against tone position, two-tone resolution, spread of the averaged estimate) | `python/scripts/make_spectral_figures.py` |
+
+`model_psd_examples_wl10.csv`, `model_fft_accuracy.csv` and `model_spectral_study.csv` are written by the figure scripts
+(`make figures`); the others by `make experiments`.
 
 ## RTL simulation
 
@@ -36,6 +41,7 @@ model is involved in producing them; `python/tests/test_sim_results.py` compares
 | `rtl_squarer_wait_hist.csv` | histogram of the time `psd_engine` waits in state `W_S` per bin |
 | `rtl_config_matrix.csv` | one row per configuration of `python/scripts/run_rtl_matrix.py` (25 configurations (16 PSD, 9 bispectrum): word length 10, 12, 14 and 16, the four windows, `ROUND` 0 and 1, serial squarer and multiplier): result of the top-level testbench against the model, words compared, clamped differences in the vectors |
 | `rtl_config_matrix_provenance.json` | the CI run and commit that produced `rtl_config_matrix.csv`, with the meaning of its columns |
+| `rtl_mc_cycles.csv` | clock cycles from the first sample (`tb_bt_psd_mc`, runs 0 and 1) or from reset (`tb_bt_psd_selftest`) to `done`, printed by the Model Composer pack testbenches; columns `testbench, run, measure, cycles`. `btpsd.mcmodel.testbench_cycle_predictions` predicts them and `python/tests/test_sim_results.py` compares the two |
 
 The simulated engines are the sequential reference engines of this repository. Their cycle counts say nothing about the
 overlapped architecture of the paper (Table 9) and are not to be compared with it; the RTL is not synthesised, so there is

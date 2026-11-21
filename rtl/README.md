@@ -12,6 +12,9 @@ testbenches run `WL = 16` for the blocks and `WL = 12`, Hann window, `ROUND = 1`
 (`results/rtl_config_matrix.csv`, `docs/figures/fig23_rtl_config_matrix.png`). There is no synthesis, timing or power
 result.
 
+The Model Composer pack in `modelcomposer/hdl/` (wrapper, bundle, signal generator, self-test) has three further testbenches
+in `tb/` (`tb_bt_psd_mc.v`, `tb_sig_gen.v`, `tb_bt_psd_selftest.v`); see `docs/MODEL_COMPOSER.md`.
+
 | File | Content |
 |---|---|
 | `cru_rotate.v`, `cru_rom.v` | constant-coefficient rotator `y = x exp(-j q pi/512)`, 4 pipeline stages, generated ROM |

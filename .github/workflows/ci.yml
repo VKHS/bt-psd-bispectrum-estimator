@@ -19,6 +19,20 @@ jobs:
       - name: Structural lint of the Verilog sources
         run: python scripts/lint_rtl.py
 
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Smoke test (files, generated sources, vectors, models, Model Composer pack, lint, testbenches, figures)
+        run: python python/scripts/smoke_test.py
+
   rtl-sim:
     runs-on: ubuntu-latest
     steps:
@@ -29,7 +43,7 @@ jobs:
         run: make -C sim -k all
       - name: Summary
         if: always()
-        run: grep -h "TB_RESULT" sim/work/*.log || true
+        run: grep -h "TB_RESULT\|^MC," sim/work/*.log || true
 
   rtl-matrix:
     runs-on: ubuntu-latest
