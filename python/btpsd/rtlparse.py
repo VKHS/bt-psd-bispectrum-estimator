@@ -13,8 +13,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-__all__ = ["RTL_DIR", "Instance", "Module", "parse_all", "parse_module", "fsm_edges", "state_values", "reg_widths",
-           "define_values"]
+__all__ = ["RTL_DIR", "Instance", "Module", "Port", "parse_all", "parse_module", "fsm_edges", "state_values", "reg_widths",
+           "define_values", "default_parameters", "ports"]
 
 RTL_DIR = Path(__file__).resolve().parents[2] / "rtl"
 
@@ -152,4 +152,103 @@ def define_values(path: Path) -> dict[str, int]:
     out: dict[str, int] = {}
     for m in re.finditer(r"(?m)^`define\s+(\w+)\s+(-?\d+)\s*$", Path(path).read_text()):
         out[m.group(1)] = int(m.group(2))
+    return out
+
+
+@dataclass
+class Port:
+    name: str
+    direction: str  # "input" | "output"
+    width: int
+    signed: bool
+    is_reg: bool
+
+
+def _header(src: str) -> tuple[str, str]:
+    """Text of the ``#( ... )`` parameter list and of the port list of the first module declaration (comments stripped)."""
+    m = re.search(r"\bmodule\s+\w+\s*(?:#\s*\((" + _PAREN2 + r")\))?\s*\((" + _PAREN2 + r")\)\s*;", src)
+    if m is None:
+        raise ValueError("no module header found")
+    return m.group(1) or "", m.group(2)
+
+
+_SIZED = re.compile(r"(\d+)\s*'\s*([sS]?)\s*([bBoOdDhH])\s*([0-9a-fA-F_]+)")
+_BASE = {"b": 2, "o": 8, "d": 10, "h": 16}
+
+
+def _literal(m: re.Match) -> str:
+    """Python text of a sized Verilog literal such as ``32'hA5A51F3D`` (an unsigned value, or the two's complement of a signed one)."""
+    width, signed, base, digits = int(m.group(1)), bool(m.group(2)), m.group(3).lower(), m.group(4).replace("_", "")
+    v = int(digits, _BASE[base]) & ((1 << width) - 1)
+    if signed and v >> (width - 1):
+        v -= 1 << width
+    return str(v)
+
+
+def _eval(expr: str, env: dict[str, int]) -> int:
+    expr = _SIZED.sub(_literal, expr)
+    return int(eval(expr, {"__builtins__": {}}, dict(env)))  # noqa: S307 - expressions come from our own sources
+
+
+def default_parameters(path: Path, env: dict[str, int] | None = None) -> dict[str, int]:
+    """Values of the ``parameter`` list of a module header, evaluated in order; ``env`` overrides defaults by name.
+
+    A default that uses a macro (a backtick name) is left out unless ``env`` supplies the parameter.
+    """
+    params_text, _ = _header(_strip_comments(Path(path).read_text()))
+    env = dict(env or {})
+    values: dict[str, int] = {}
+    for chunk in re.split(r"\bparameter\b", params_text)[1:]:
+        m = re.match(r"\s*(?:signed\s+)?(?:\[[^\]]*\]\s*)?(\w+)\s*=\s*(.+?)\s*,?\s*$", chunk, re.S)
+        if m is None:
+            continue
+        name, expr = m.group(1), m.group(2)
+        if name in env:
+            values[name] = env[name]
+        elif "`" not in expr:
+            values[name] = _eval(expr, {**values, **env})
+    return values
+
+
+def _split_top(text: str) -> list[str]:
+    """Split ``text`` at the commas that are not inside parentheses or brackets."""
+    parts, depth, cur = [], 0, []
+    for ch in text:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur))
+    return [p.strip() for p in parts if p.strip()]
+
+
+def ports(path: Path, env: dict[str, int] | None = None) -> list[Port]:
+    """Ports of the first module of ``path`` in declaration order, widths evaluated with the module parameters (``env`` overrides)."""
+    values = default_parameters(path, env)
+    values.update(env or {})
+    _, text = _header(_strip_comments(Path(path).read_text()))
+    out: list[Port] = []
+    last = None
+    for piece in _split_top(text):
+        m = re.fullmatch(r"(?:(input|output)\s+(reg\s+|wire\s+)?(signed\s+)?(?:\[([^\]]+)\]\s*)?)?(\w+)", piece, re.S)
+        if m is None:
+            raise ValueError(f"cannot parse port declaration {piece!r}")
+        direction, kind, signed, rng, name = m.groups()
+        if direction is None:
+            if last is None:
+                raise ValueError(f"port {name!r} has no direction")
+            direction, is_reg, is_signed, width = last
+        else:
+            width = 1
+            if rng is not None:
+                hi, lo = rng.split(":")
+                width = _eval(hi, values) - _eval(lo, values) + 1
+            is_reg, is_signed = bool(kind and kind.strip() == "reg"), bool(signed)
+            last = (direction, is_reg, is_signed, width)
+        out.append(Port(name, direction, width, is_signed, is_reg))
     return out

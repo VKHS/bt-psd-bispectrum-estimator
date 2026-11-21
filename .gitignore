@@ -16,3 +16,12 @@ obj_dir/
 *.backup.log
 .Xil/
 fpga/build/
+# Model Composer pack: everything that a run writes (stimulus, logs, saved models, Simulink caches)
+modelcomposer/stimulus/
+modelcomposer/work/
+*.slx
+*.slxc
+*.autosave
+*.asv
+slprj/
+sysgen/

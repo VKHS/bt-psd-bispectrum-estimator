@@ -17,3 +17,7 @@ All files are `$readmemh` text, one word per line, lower-case hex, two's complem
 | `bsp_wl12_x.mem` | real sample codes (12 bit), hop 256: the first 768 samples at 0.6 of the peak, the rest amplified and hard-clipped to full scale | `tb/tb_bispectrum_top.v` |
 | `bsp_wl12_B_re.mem`, `bsp_wl12_B_im.mem` | `max_bin^2` words row-major `[f1][f2]`, `2*wl+10` bits (34 for wl = 12) | `tb/tb_bispectrum_top.v` |
 | `bsp_wl12.vh` | Verilog macros: frames `S`, `AVG_SHIFT`, `MAX_BIN` | `tb/tb_bispectrum_top.v` |
+| `siggen_wl12_x.mem` | 3 x 2048 sample codes (12 bit) of `modelcomposer/hdl/sig_gen.v`: run A tone + noise (`noise_shift` 3), run C noise at full scale (`noise_shift` 0, saturates), run D tone alone | `tb/tb_sig_gen.v` |
+| `siggen_wl12.vh` | Verilog macros: `SG_N`, `SG_PINC`, `SG_SHIFT_A`, `SG_SHIFT_C` | `tb/tb_sig_gen.v` |
+| `selftest_wl12_P.mem` | 1024 words, `P_int` of the first 4 chunks of run A (Hann, rounding) | `tb/tb_bt_psd_selftest.v` |
+| `selftest_wl12.vh` | Verilog macros: `ST_PINC`, `ST_NOISE_SHIFT`, `ST_NCHUNKS` | `tb/tb_bt_psd_selftest.v` |
