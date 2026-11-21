@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Cheap structural lint of the Verilog sources (no simulator needed).
 
-Checks, per file set given on the command line (default: rtl/*.v and tb/*.v):
+Checks, per file set given on the command line (default: rtl/*.v, tb/*.v and modelcomposer/hdl/*.v):
   * balanced module/endmodule, function/endfunction, case/endcase, generate/endgenerate, begin/end, (), [], {}
   * every instantiated module is defined, every named port / parameter connection exists, every input port is connected
+  * a module that is defined in more than one file (the include-free bundle of the Model Composer pack repeats the modules of
+    rtl/) has the same parameters and ports everywhere
 It does not replace a compiler: run `make -C sim all` with Icarus Verilog, Verilator or Vivado for that.
 """
 import re
@@ -90,12 +92,17 @@ def check_pairs(path: Path, text: str, errs: list):
 
 
 def main(argv):
-    files = [Path(a) for a in argv] or sorted((ROOT / "rtl").glob("*.v")) + sorted((ROOT / "tb").glob("*.v"))
+    files = [Path(a) for a in argv] or (sorted((ROOT / "rtl").glob("*.v")) + sorted((ROOT / "tb").glob("*.v"))
+                                       + sorted((ROOT / "modelcomposer" / "hdl").glob("*.v")))
     texts = {f: strip(f.read_text()) for f in files}
-    errs, mods = [], {}
+    errs, mods, where = [], {}, {}
     for f, t in texts.items():
         check_pairs(f, t, errs)
-        mods.update(parse_modules(t))
+        for name, spec in parse_modules(t).items():
+            if name in mods and mods[name] != spec:
+                errs.append(f"module {name} is defined in {where[name].name} and in {f.name} with different parameters or ports")
+            mods[name] = spec
+            where.setdefault(name, f)
     for f, t in texts.items():
         for m in re.finditer(r"\b(\w+)\s*(#\s*\()?", t):
             name = m.group(1)
