@@ -9,9 +9,13 @@ marked *paper*.
 
 | Layer | What exists | Evidence | Not verified |
 |---|---|---|---|
-| Python model (`python/btpsd`) | floating-point references and bit-accurate fixed-point models of the PSD and bispectrum paths | 73 tests, independent floating-point references, schedule properties | real EEG/EOG/EMG records (the paper's signals are not part of the repository) |
-| RTL control and addressing | line-by-line Python transliteration of the Verilog (`btpsd/rtlmodel.py`) | `tests/test_rtlmodel.py` (6 tests) | typing and syntax of the Verilog text (covered by the simulation below) |
-| RTL (`rtl/`) | Verilog-2001 sources, six self-checking testbenches, golden vectors | structural lint (`scripts/lint_rtl.py`); Icarus Verilog simulation (`make -C sim all`, CI): rotator 9216, butterfly 2048, squarer 1024 vectors, FFT 4 chunks at 207 cycles each, PSD 1024 bins, bispectrum 32 x 32 bins, all bit-exact to the model, including full-scale segments | other simulators and gate-level simulation; synthesis, timing and power; word lengths, windows and `ROUND = 0` other than the vectors' |
+| Python model (`python/btpsd`) | floating-point references and bit-accurate fixed-point models of the PSD and bispectrum paths | `python/tests/`, 380 tests in all (85 on the model, windows and tables, 7 on the transliteration, 28 on the structure and lint of the Verilog, 10 on the simulation results, 74 on the data behind the figures and studies, 12 on the configuration matrix, 149 on the Model Composer pack and its guide, 15 on the smoke test); independent floating-point references, schedule properties | real EEG/EOG/EMG records (the paper's signals are not part of the repository) |
+| RTL control and addressing | line-by-line Python transliteration of the Verilog (`btpsd/rtlmodel.py`) | `tests/test_rtlmodel.py` (7 tests) | typing and syntax of the Verilog text (covered by the simulation below) |
+| Figures (`docs/figures/`, 31 sheets) | structure drawn from the Verilog by `btpsd/rtlparse.py` (the generator fails if a drawn state or transition is not in the source), cycle traces and state occupancy from the CI simulation (`results/rtl_*.csv`, run id and commit in `results/rtl_sim_provenance.json`), model results from `results/` | `tests/test_rtl_structure.py` (12), `tests/test_sim_results.py` (10), `tests/test_example_sheets.py` (6), `tests/test_fft_sheets.py` (26), `tests/test_spectral_study.py` (16), `tests/test_mc_sheets.py` (20): the printed numbers equal the model formulas and the simulated counts | a different simulator or synthesis; see `docs/figures/README.md` |
+| RTL (`rtl/`) | Verilog-2001 sources, six self-checking testbenches (three more for the Model Composer pack, see below), golden vectors | structural lint (`scripts/lint_rtl.py`); Icarus Verilog simulation (`make -C sim all`, CI): rotator 9216, butterfly 2048, squarer 1024 vectors, FFT 4 chunks at 207 cycles each, PSD 1024 bins, bispectrum 32 x 32 bins, all bit-exact to the model, including full-scale segments; configuration matrix (`make -C sim matrix`, CI job `rtl-matrix`): both top levels bit-exact for 25 further configurations (WL 10 to 16, four windows, `ROUND` 0 and 1, serial and multiplier squarer) | other simulators and gate-level simulation; synthesis, timing and power; `WL` outside 10 to 16, other rotator ROM tolerances, `LOGB` other than 5, the cells of the matrix that were not run |
+| FFT study (`btpsd/fftstudy.py`, `docs/FFT.md`, `fig24` to `fig28`) | index space, bank map, pass snapshots, twiddle and rotation counts, block diagram at signal level, fixed-point accuracy against word length, rounding and input level | `tests/test_fft_study.py` (26), `tests/test_fft_sheets.py` (26): the drawn structure is read from the Verilog, the numbers equal the model, `results/model_fft_accuracy.csv` | other word lengths than those tabulated; synthesis |
+| Model Composer pack (`modelcomposer/`, `btpsd/mcmodel.py`, `btpsd/siggen.py`, `docs/MODEL_COMPOSER.md`, `fig30`, `fig31`) | Black Box wrapper that records and replays the samples, include-free bundle, Simulink bench scripts, in-fabric test-signal generator and self-test, checker of logged runs | Icarus Verilog simulation (`make -C sim mc mcb sg st`, CI): wrapper, bundle, generator and self-test bit-exact to the model, and the clock cycles to `done` equal to the model's prediction (`results/rtl_mc_cycles.csv`); `tests/test_mcmodel.py` (31), `test_siggen.py` (22), `test_gen_mc.py` (22), `test_mc_wrapper_protocol.py` (10), `test_matlab_static.py` (13), `test_mc_docs.py` (31) | **the Simulink flow**: MATLAB, Simulink, Model Composer and the Vivado simulator were not available, so `bt_mc_build.m`, `bt_mc_run.m`, `bt_psd_mc_config.m` and `sim/xsim_smoke.sh` are checked statically only; synthesis, timing, power |
+| Smoke test (`btpsd/smoke.py`, `python/scripts/smoke_test.py`) | 15 checks of the whole repository (14 by default; the Vivado simulator step runs only with `--xsim`) | `tests/test_smoke.py` (15), CI job `smoke` | the Vivado simulator step |
 
 The first simulation found two defects, both fixed: the rounded difference of the two extreme codes halves to one LSB
 above the largest code, which the model carried on while the RTL wrapped it (both now clamp, see section 2), and two
@@ -109,6 +113,12 @@ STALL = max(0, LAT - 8) = 4 idle cycles,   issue cycles = 192 + 4 = 196,   total
 There is no other read-after-write hazard (`results/fft512_cycles_vs_latency.csv`). The transliteration test shows
 that the stall is minimal: one stall cycle fewer corrupts the result.
 
+`rtlmodel.write_back_slack` makes this explicit for all 64 butterflies of pass 1 and pass 2: the slack of a butterfly is
+its issue slot minus the first slot in which its last input word can be read (issue slot of the producing butterfly plus
+`LAT`), and a negative slack is a hazard. With the stall of 4 the smallest slack is 0 (pass 1, butterflies 0 to 7;
+butterflies 8 to 15 have 8, and so on up to 56), pass 2 has between 45 and 52; with a stall of 3 the slack of pass 1
+becomes -1. `fig18` draws the pipelines and this slack, `fig10` the schedule.
+
 ---
 
 ## 4. PSD engine (`rtl/psd_engine.v`, `rtl/bt_psd_top.v`)
@@ -127,6 +137,13 @@ full-scale): 836 cycles for the four FFT phases (209 each) and 115 462 cycles fo
 38.5 k per segment, of which 21 757 cycles in total are squarer cycles of the model. The paper's overlapped design
 (Table 9: 1252 cycles latency) is a different architecture; the two are not comparable.
 
+The simulation prints the cycles of every state, so the figure is not an estimate: `results/rtl_state_occupancy.csv`
+(T_INIT 1, T_CLR 1027, T_LOAD 2048, T_FFT 836, T_SEG 115 462; W_S is 30 973 of the segment cycles, which is 3 per bin
+visit plus the 21 757 squarer cycles of the model, over 3 072 visits) and the residence histogram
+`results/rtl_squarer_wait_hist.csv` agree with the model formulas (`tests/test_sim_results.py`; the histogram built from
+the model equals the simulated one exactly). `fig19` shows the waveforms of the FFT core and the squarer, `fig20` the
+cycles per state; `fig16` and `fig17` the state machines.
+
 Accumulator width: one power value is below `2^(2 WL - 1)`, so the worst case needs `2 WL + 1 + ceil(log2 S)` bits; the
 default `2 WL + 8` covers `S <= 128` segments in the worst case, real signals need far less.
 
@@ -144,7 +161,9 @@ and copied to the start of the next frame), runs the FFT core, and hands the fin
    `conj(F3)`, read-modify-write of the accumulator RAM (`BACCW = 2 WL + 10` bits, real and imaginary).
 
 By FSM inspection one frame costs roughly `32 * MAXB + 3 * MAXB + 4 * MAXB^2` cycles (about 5.2 k cycles for
-`MAXB = 32`); the testbench measures 5219 cycles per frame in the engine phase (209 more for the FFT phase). Worst-case
+`MAXB = 32`); the testbench measures 5219 cycles per frame in the engine phase (209 more for the FFT phase; B_INIT 1, B_CLR 1027,
+B_COPY 1285, B_EXT 1536, B_FFT 1045, B_ENG 26 095 for the five frames of the testbench, `results/rtl_state_occupancy.csv`,
+`fig20`). Worst-case
 accumulator width is
 `2 WL + 1 + ceil(log2 S)` bits (one product is below `2^(2 WL)` in magnitude), so the default `BACCW` covers
 `S <= 512` frames. `LOGB` is limited to 8 (a 9-bit bin address).
@@ -157,6 +176,7 @@ accumulator width is
 |---|---|---|
 | Scheduling | CRU shared between FFT, FD filter and window with 16 parallel branches; chunk loading, FFT, merge, window, squarer and accumulation overlap (Table 9: 205 Msps, 1252 cycles latency, 232 MHz, 0 DSP, 4834 LUT) | one butterfly per cycle in the FFT; merge, window, squarer and accumulation are sequential state machines; **no throughput, resource, power or frequency claim is made** |
 | Multipliers | none (constant multiplications in the CRU as shift-add) | the merge, window and bispectrum use `*` operators, which synthesis will map to DSP slices or LUTs; resource numbers cannot be compared with Table 9 |
+| FFT memory organisation | eight dual-port banks `M_1..M_8` plus `M_9` for the second chunk, two register sequences `R0..R63` and `R64..R127` (Tables 1, 2) with sixteen 8-to-1 multiplexers each, demultiplexers and a barrel shifter (15 bit in the text, 8 bit in Fig. 3, erratum 13) driven by a 15-bit main counter (7-bit pass counter, 8-bit butterfly counter) | eight 1R1W banks with an in-place conflict-free bank and row map (section 3), no register sequences, multiplexer network or barrel shifter; the schedule and the map were derived independently of Tables 1, 2, and the equivalence of the two organisations is not claimed |
 | CRU ROM | Table 6 as printed (27 of 128 rows are inconsistent in the text layer, see `PAPER_NOTES.md`) | ROM generated by `python/scripts/gen_cru_rom.py` for a 0.01 rad tolerance (`data/cru_rom_generated.csv`; 129 entries, max angle error 0.0097 rad) |
 | Squarer | sum of odd numbers, count assumed to be the sample code | same; cycle counts reported, see `PAPER_NOTES.md` |
 | Data | EEG, EOG, EMG records from the database of the paper's Ref. [26] | synthetic signals (`btpsd/signals.py`) |
@@ -188,3 +208,14 @@ windows (`rsat` in `psd_engine.v`, `rsat_win` in `bispectrum_engine.v`) is not r
 Blackman window taps sum to 1 in magnitude (Hamming sums to 1.001), and the merge would take six neighbouring differences
 `D` of full-scale magnitude with matching signs, which none of the inputs approaches. The `(-j)`
 negation saturation is not reached either (`ROUND = 1`, see section 2).
+
+**Configuration matrix.** The default testbenches fix one configuration per top level. `python/scripts/run_rtl_matrix.py`
+(`make -C sim matrix`; CI job `rtl-matrix`, four shards) regenerates the golden vectors of the model for 25 configurations
+(16 PSD, 9 bispectrum) and hands each configuration to the same testbenches through macros: word length 10, 12, 14 and 16,
+the four windows (the integer taps of the model are checked against `rtl/btpsd_consts.vh` first), `ROUND` 0 and 1, serial
+squarer and multiplier. Every run compares all 1 024 result words with the model, and all 25 match
+(`results/rtl_config_matrix.csv`, drawn on `fig23`; the CI run is named in `results/rtl_config_matrix_provenance.json`). The
+table also shows that the full-scale segments reach the butterfly clamp at every word length with rounding (4 differences in
+the PSD vectors, 13 in the bispectrum vectors) and that truncation never reaches it. The expected values come from the model,
+so a pass shows that the Verilog follows the model's arithmetic in those configurations; it does not test the model against
+the paper.

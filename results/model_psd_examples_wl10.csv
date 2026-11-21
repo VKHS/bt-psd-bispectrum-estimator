@@ -1,0 +1,4 @@
+signal,window,wl,record_samples,seed,sqnr_vs_exact_welch_db,psd_lsb_db,zero_bins_of_513
+EEG-like,hann,10,5120,3,27.845,-21.584,119
+AR(2) narrow-band,hann,10,5120,3,18.124,-21.584,200
+white noise,hann,10,5120,3,12.869,-21.584,0

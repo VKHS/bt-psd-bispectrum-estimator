@@ -24,6 +24,7 @@ from .r8fft import dft8_fixed, r8fft_fixed, to_fixed
 from .rtlmodel import LAT
 from .schedule import schedule_cycles
 from . import signals as sg
+from . import siggen as gen
 
 __all__ = [
     "pack",
@@ -34,6 +35,8 @@ __all__ = [
     "sq_vectors",
     "psd_vectors",
     "bispec_vectors",
+    "siggen_vectors",
+    "selftest_vectors",
     "describe",
 ]
 
@@ -205,13 +208,13 @@ def clipped_tone(n: int, seed: int, bin_1024: float = 100.5, gain: float = 1.3, 
 
 
 def psd_vectors(wl: int = 12, window: str = "hann", nchunks: int = 4, seed: int = 5, peak: float = 0.5,
-                stress_from: int = 2) -> dict:
+                stress_from: int = 2, rounding: str = "round") -> dict:
     """Input: ``nchunks * 512`` real sample codes; expected: ``P_int`` (1024 words) of :func:`psd_fixed`.
 
     Chunks before ``stress_from`` are pink noise at ``peak``; from there on the input is a hard-clipped full-scale tone
     (:func:`clipped_tone`), so that the saturating paths of the engine are part of the comparison.
     """
-    cfg = HwConfig(wl=wl, window=window)
+    cfg = HwConfig(wl=wl, window=window, rounding=rounding)
     x = sg.pink(nchunks * 512, seed, peak=peak)
     if stress_from < nchunks:
         x[stress_from * 512:] = clipped_tone(nchunks * 512, seed + 100)[stress_from * 512:]
@@ -225,13 +228,13 @@ def psd_vectors(wl: int = 12, window: str = "hann", nchunks: int = 4, seed: int 
 # bispectrum
 # ---------------------------------------------------------------------------
 def bispec_vectors(wl: int = 12, window: str = "hann", nsamples: int = 512 * 3, max_bin: int = 32, seed: int = 6,
-                   stress_from: int = 768) -> dict:
+                   stress_from: int = 768, rounding: str = "round") -> dict:
     """Input sample codes (hop 256, 512-sample frames); expected ``B_re, B_im`` of :func:`bispectrum_fixed`.
 
     The first ``stress_from`` samples are the coupled test signal at 0.6 of its peak; the rest is the same signal
     amplified 2.5 times and hard-clipped to full scale, so that the saturating paths of the engine are exercised.
     """
-    cfg = BispecConfig(wl=wl, window=window, max_bin=max_bin)
+    cfg = BispecConfig(wl=wl, window=window, max_bin=max_bin, rounding=rounding)
     x, _ = sg.qpc(nsamples, coupled=True, seed=seed)
     x = np.asarray(x, dtype=float)
     y = 0.6 * x
@@ -240,6 +243,35 @@ def bispec_vectors(wl: int = 12, window: str = "hann", nsamples: int = 512 * 3, 
     xs = codes.astype(float) / float(1 << (wl - 1))
     re, im, S, shift = bispectrum_fixed(xs, cfg)
     return {"cfg": cfg, "x": codes, "B_re": re, "B_im": im, "S": S, "avg_shift": shift}
+
+
+# ---------------------------------------------------------------------------
+# test-signal generator and the in-fabric self-test (Model Composer pack)
+# ---------------------------------------------------------------------------
+def siggen_vectors(wl: int = 12, n: int = 2048) -> dict:
+    """Expected samples of ``sig_gen`` for three configurations (``n`` samples each, concatenated in this order).
+
+    A: tone at bin 100.37 plus noise (``noise_shift = 3``) - also the record of the self-test;
+    C: the same tone with ``noise_shift = 0`` (noise of full scale: the saturation of the sum is exercised);
+    D: the tone alone (noise disabled).
+    """
+    rec = gen.selftest_record(wl, n // 512)
+    pinc = rec["pinc"]
+    shift_a, shift_c = gen.SELFTEST["noise_shift"], 0
+    a = gen.generate(n, pinc, shift_a, wl)
+    c = gen.generate(n, pinc, shift_c, wl)
+    d = gen.generate(n, pinc, None, wl)
+    return {"x": np.concatenate([a, c, d]), "n": n, "pinc": pinc, "shift_a": shift_a, "shift_c": shift_c,
+            "sat_c": int(np.sum((c == (1 << (wl - 1)) - 1) | (c == -(1 << (wl - 1)))))}
+
+
+def selftest_vectors(wl: int = 12, nchunks: int = 4) -> dict:
+    """``P_int`` of :func:`psd_fixed` (Hann, rounding) for the first ``nchunks * 512`` samples of ``sig_gen`` (configuration A)."""
+    rec = gen.selftest_record(wl, nchunks)
+    cfg = HwConfig(wl=wl, window="hann", rounding="round")
+    res = psd_fixed(rec["x"], cfg, quantize=False)
+    return {"cfg": cfg, "x": rec["x"], "P": res.P_int, "S": res.S, "avg_shift": res.avg_shift, "pinc": rec["pinc"],
+            "noise_shift": rec["noise_shift"], "nchunks": nchunks}
 
 
 def describe() -> str:
@@ -262,4 +294,8 @@ All files are `$readmemh` text, one word per line, lower-case hex, two's complem
 | `bsp_wl12_x.mem` | real sample codes (12 bit), hop 256: the first 768 samples at 0.6 of the peak, the rest amplified and hard-clipped to full scale | `tb/tb_bispectrum_top.v` |
 | `bsp_wl12_B_re.mem`, `bsp_wl12_B_im.mem` | `max_bin^2` words row-major `[f1][f2]`, `2*wl+10` bits (34 for wl = 12) | `tb/tb_bispectrum_top.v` |
 | `bsp_wl12.vh` | Verilog macros: frames `S`, `AVG_SHIFT`, `MAX_BIN` | `tb/tb_bispectrum_top.v` |
+| `siggen_wl12_x.mem` | 3 x 2048 sample codes (12 bit) of `modelcomposer/hdl/sig_gen.v`: run A tone + noise (`noise_shift` 3), run C noise at full scale (`noise_shift` 0, saturates), run D tone alone | `tb/tb_sig_gen.v` |
+| `siggen_wl12.vh` | Verilog macros: `SG_N`, `SG_PINC`, `SG_SHIFT_A`, `SG_SHIFT_C` | `tb/tb_sig_gen.v` |
+| `selftest_wl12_P.mem` | 1024 words, `P_int` of the first 4 chunks of run A (Hann, rounding) | `tb/tb_bt_psd_selftest.v` |
+| `selftest_wl12.vh` | Verilog macros: `ST_PINC`, `ST_NOISE_SHIFT`, `ST_NCHUNKS` | `tb/tb_bt_psd_selftest.v` |
 """

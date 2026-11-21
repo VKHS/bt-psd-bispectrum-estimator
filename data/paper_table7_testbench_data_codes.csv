@@ -1,0 +1,10 @@
+signal,data_code_printed,source
+EEG-1,S10,"paper-reported, Integration 99 (2024) 102241, Table 7"
+EEG-2,S01,"paper-reported, Integration 99 (2024) 102241, Table 7"
+EEG-3,A10E,"paper-reported, Integration 99 (2024) 102241, Table 7"
+EOG-1,S06,"paper-reported, Integration 99 (2024) 102241, Table 7"
+EOG-2,S10T,"paper-reported, Integration 99 (2024) 102241, Table 7"
+EOG-3,S10T,"paper-reported, Integration 99 (2024) 102241, Table 7"
+EMG-1,S00E,"paper-reported, Integration 99 (2024) 102241, Table 7"
+EMG-2,S01E,"paper-reported, Integration 99 (2024) 102241, Table 7"
+EMG-3,A01T,"paper-reported, Integration 99 (2024) 102241, Table 7"

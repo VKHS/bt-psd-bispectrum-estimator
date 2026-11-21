@@ -106,7 +106,7 @@ def fig01_system_overview():
 
 def fig02_memory_fft_architecture():
     d = Diagram(122, 93, "Memory-based radix-8 FFT: read, compute, write-back loop",
-                subtitle="Eight single-port banks, one butterfly (8 words) per cycle; cyclic rotators keep every access conflict-free.")
+                subtitle="Eight banks with one read and one write port each, one butterfly (8 words) per cycle; cyclic rotators keep every access conflict-free.")
     d.legend(3, 82.0, LEGEND, dx=19.5)
     d.box(26, 66, 54, 10, "Address generator (pass p, butterfly b)\nhi = b>>3, lo = b&7, s = (hi+lo) mod 8\nrow_j for j = 0..7, twiddle q_k for k = 1..7", "control", fs=6.8)
     d.box(88, 66, 32, 10, "Load (natural order)\none word per cycle\nbank, row from address a", "io", fs=6.6)

@@ -1,0 +1,4 @@
+window,paper_figure,axis_top_value,read_centre_minus_neighbour,symmetric_window,periodic_window,source
+hann,13,70.0,31.38,31.38,32.0,read from the printed panel by pixel measurement (python/scripts/measure_paper_window_stems.py); not a value printed in the paper
+hamming,14,70.0,39.14,39.11,39.68,read from the printed panel by pixel measurement (python/scripts/measure_paper_window_stems.py); not a value printed in the paper
+blackman,15,60.0,21.34,21.32,21.76,read from the printed panel by pixel measurement (python/scripts/measure_paper_window_stems.py); not a value printed in the paper

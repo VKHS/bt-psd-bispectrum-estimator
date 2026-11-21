@@ -1,11 +1,31 @@
 // Self-checking testbench of the whole PSD estimator against btpsd.estimator.psd_fixed
-// (WL = 12, Hann window, 4 chunks = 3 segments, serial sum-of-odds squarer).
+// (default: WL = 12, Hann window, 4 chunks = 3 segments, serial sum-of-odds squarer).
 // Run from the repository root:  make -C sim psd
+//
+// Other configurations (word length, window, ROUND, squarer) are run by python/scripts/run_rtl_matrix.py: it generates
+// vectors and an include file for the configuration and defines TB_VH (the include file) on the iverilog command line.
+// The include file holds the PSD_* counts of the vectors and may define TB_WL, TB_PARAMS (the parameter overrides of
+// the DUT), TB_XFILE and TB_PFILE; whatever it leaves undefined keeps the default below.
 `timescale 1ns / 1ps
-`include "psd_wl12.vh"
+`ifndef TB_VH
+`define TB_VH "psd_wl12.vh"
+`endif
+`include `TB_VH
+`ifndef TB_WL
+`define TB_WL 12
+`endif
+`ifndef TB_PARAMS
+`define TB_PARAMS .WL(`TB_WL), .ROUND(1), .SQ_SERIAL(1)
+`endif
+`ifndef TB_XFILE
+`define TB_XFILE "sim/vectors/psd_wl12_x.mem"
+`endif
+`ifndef TB_PFILE
+`define TB_PFILE "sim/vectors/psd_wl12_P.mem"
+`endif
 
 module tb_psd_top;
-    localparam WL = 12, ACCW = 2 * WL + 8, NS = `PSD_NCHUNKS * 512;
+    localparam WL = `TB_WL, ACCW = 2 * WL + 8, NS = `PSD_NCHUNKS * 512;
 
     reg clk = 1'b0, rst_n = 1'b0;
     always #5 clk = ~clk;
@@ -19,7 +39,7 @@ module tb_psd_top;
     reg  [9:0]           res_addr;
     wire [ACCW-1:0]      res_data;
 
-    bt_psd_top #(.WL(WL), .ROUND(1), .SQ_SERIAL(1)) dut (
+    bt_psd_top #(`TB_PARAMS) dut (
         .clk(clk), .rst_n(rst_n), .avg_shift(`PSD_AVG_SHIFT),
         .in_valid(in_valid), .in_data(in_data), .in_ready(in_ready), .busy(busy),
         .res_addr(res_addr), .res_data(res_data));
@@ -31,10 +51,34 @@ module tb_psd_top;
         if (dut.st == 3'd4) c_seg = c_seg + 1;
     end
 
+    // State occupancy (cycles per state of the top-level controller and of the segment engine, whole run) and the
+    // residence time of the engine in W_S (= 4'd11, waiting for the squarer) per bin, binned by floor(log2(cycles)).
+    // Printed as OCC and HIST lines, analysed by python/scripts/make_sim_figures.py.
+    integer occ_top [0:7];
+    integer occ_eng [0:15];
+    integer ws_hist [0:15];
+    integer ws_len = 0, lg, oi;
+    initial begin
+        for (oi = 0; oi < 8; oi = oi + 1)  occ_top[oi] = 0;
+        for (oi = 0; oi < 16; oi = oi + 1) occ_eng[oi] = 0;
+        for (oi = 0; oi < 16; oi = oi + 1) ws_hist[oi] = 0;
+    end
+    always @(posedge clk) if (rst_n) begin
+        occ_top[dut.st]       = occ_top[dut.st] + 1;
+        occ_eng[dut.u_eng.st] = occ_eng[dut.u_eng.st] + 1;
+        if (dut.u_eng.st == 4'd11) ws_len = ws_len + 1;
+        else if (ws_len != 0) begin
+            lg = 0;
+            while ((ws_len >> (lg + 1)) != 0) lg = lg + 1;
+            ws_hist[lg] = ws_hist[lg] + 1;
+            ws_len = 0;
+        end
+    end
+
     integer i, errs, cyc0, cyc;
     initial begin
-        $readmemh("sim/vectors/psd_wl12_x.mem", xmem);
-        $readmemh("sim/vectors/psd_wl12_P.mem", pexp);
+        $readmemh(`TB_XFILE, xmem);
+        $readmemh(`TB_PFILE, pexp);
         errs = 0;  in_valid = 1'b0;  in_data = 0;  res_addr = 0;
         repeat (3) @(negedge clk);
         rst_n = 1'b1;
@@ -54,6 +98,9 @@ module tb_psd_top;
         $display("all %0d segments processed at t = %0d ns", `PSD_S, $time);
         $display("T_FFT %0d cycles for %0d chunks, T_SEG %0d cycles for %0d segments (serial squarer: %0d squarer cycles in the model)",
                  c_fft, `PSD_NCHUNKS, c_seg, `PSD_S, `PSD_SQUARER_CYCLES);
+        for (i = 0; i < 8; i = i + 1)  if (occ_top[i] != 0) $display("OCC,psd_top,%0d,%0d", i, occ_top[i]);
+        for (i = 0; i < 16; i = i + 1) if (occ_eng[i] != 0) $display("OCC,psd_engine,%0d,%0d", i, occ_eng[i]);
+        for (i = 0; i < 16; i = i + 1) if (ws_hist[i] != 0) $display("HIST,psd_sq_wait_log2,%0d,%0d", i, ws_hist[i]);
         for (i = 0; i < 1025; i = i + 1) begin
             @(negedge clk);
             if (i >= 1) begin

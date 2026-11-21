@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from btpsd.windows import (TABLE4_SIGNIFICANT_TAPS, apply_window_freq, approx_spectral_kernel,
-                           spectral_kernel, window)
+from btpsd.windows import (RAISED_COSINE, TABLE4_SIGNIFICANT_TAPS, apply_window_freq, approx_spectral_kernel,
+                           kernel_exactness, spectral_kernel, window, window_metrics)
 
 L = 1024
 
@@ -46,3 +46,25 @@ def test_approx_kernel_energy():
     assert set(ker) == {-2, -1, 0, 1, 2} and 0.9 < kept <= 1.0
     _, kept_h = approx_spectral_kernel("hann", 3)
     assert kept_h == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("name", ["rect", "hann", "hamming", "blackman"])
+def test_window_metrics_closed_forms(name):
+    """Coherent gain, noise bandwidth and main-lobe width follow from the three cosine coefficients."""
+    a0, a1, a2 = RAISED_COSINE[name]
+    m = window_metrics(name)
+    assert m["cg"] == pytest.approx(a0, abs=1e-12)
+    assert m["enbw"] == pytest.approx((a0**2 + (a1**2 + a2**2) / 2) / a0**2, abs=1e-9)
+    assert m["null"] == pytest.approx({"rect": 1, "hann": 2, "hamming": 2, "blackman": 3}[name], abs=1e-3)
+
+
+@pytest.mark.parametrize("name,psl", [("rect", -13.26), ("hann", -31.47), ("hamming", -42.67), ("blackman", -58.11)])
+def test_peak_sidelobe_levels(name, psl):
+    """Peak sidelobe levels of the four windows (the values of the standard window tables, to 0.05 dB)."""
+    assert window_metrics(name)["psl_db"] == pytest.approx(psl, abs=0.05)
+
+
+@pytest.mark.parametrize("name", ["hann", "hamming", "blackman"])
+def test_kernel_exactness_periodic_against_symmetric(name):
+    assert kernel_exactness(name, periodic=True) < 1e-12
+    assert kernel_exactness(name, periodic=False) > 1e-4

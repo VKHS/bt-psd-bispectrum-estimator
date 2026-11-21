@@ -1,8 +1,11 @@
-"""Memory map and butterfly schedule of the radix-8 memory-based 512-point FFT (paper Figs. 12-16).
+"""Memory map and butterfly schedule of the radix-8 memory-based 512-point FFT.
+
+This is the repository's own in-place scheme; the paper's organisation (register sequences, Fig. 3 and Tables 1-2) is
+different, see docs/ARCHITECTURE.md section 6.
 
 Data layout
 -----------
-A 512-word chunk lives in 8 single-port banks of 64 words.  With the address
+A 512-word chunk lives in 8 banks of 64 words (one read and one write port each).  With the address
 split ``a = 64*a2 + 8*a1 + a0`` (digits ``a2, a1, a0`` in 0..7)::
 
     bank(a) = (a2 + a1 + a0) mod 8        row(a) = 8*a2 + a1

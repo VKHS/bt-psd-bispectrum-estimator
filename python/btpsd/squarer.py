@@ -1,4 +1,4 @@
-"""Sum-of-odd-numbers squarer and magnitude-squared unit (paper Sec. on |X|^2, Fig. 22-23 style).
+"""Sum-of-odd-numbers squarer and magnitude-squared unit (paper Eq. 26, "Square Unit" of Fig. 3).
 
 ``n**2 = 1 + 3 + 5 + ... + (2|n| - 1)``: a squarer built from one adder and a
 counter needs ``|n|`` cycles and no multiplier.  The value is exact; the

@@ -1,0 +1,8 @@
+window,significant_taps_printed,source
+Rectangular,1,"paper-reported, Integration 99 (2024) 102241, Table 4"
+Triangular,5,"paper-reported, Integration 99 (2024) 102241, Table 4"
+Parzen,3,"paper-reported, Integration 99 (2024) 102241, Table 4"
+Hann,3,"paper-reported, Integration 99 (2024) 102241, Table 4"
+Hamming,3,"paper-reported, Integration 99 (2024) 102241, Table 4"
+Blackman,5,"paper-reported, Integration 99 (2024) 102241, Table 4"
+Kaiser,5,"paper-reported, Integration 99 (2024) 102241, Table 4"

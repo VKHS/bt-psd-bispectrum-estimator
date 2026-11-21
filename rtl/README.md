@@ -5,9 +5,15 @@ Verilog-2001 sources of the reference implementation (design notes: `docs/ARCHIT
 **Status: simulated, not synthesised.** `make -C sim all` compiles the sources with Icarus Verilog (`-g2005 -Wall`) and
 runs six self-checking testbenches against the golden vectors of the model; all six pass, bit for bit (CI repeats this
 on every push). The sources also pass the structural lint (`scripts/lint_rtl.py`), and the control and addressing logic
-has a line-by-line Python transliteration (`python/btpsd/rtlmodel.py`, `python/tests/test_rtlmodel.py`). The tested
-configurations are `WL = 16` for the blocks and `WL = 12`, Hann window, `ROUND = 1` for the top levels; other word
-lengths, windows and `ROUND = 0` need vectors generated for them. There is no synthesis, timing or power result.
+has a line-by-line Python transliteration (`python/btpsd/rtlmodel.py`, `python/tests/test_rtlmodel.py`). The default
+testbenches run `WL = 16` for the blocks and `WL = 12`, Hann window, `ROUND = 1` for the top levels. `make matrix`
+(CI job `rtl-matrix`) regenerates the vectors and runs both top levels for 25 further configurations: `WL` 10, 12, 14 and
+16, the four windows, `ROUND` 0 and 1, serial squarer and multiplier. All 25 match the model bit for bit
+(`results/rtl_config_matrix.csv`, `docs/figures/fig23_rtl_config_matrix.png`). There is no synthesis, timing or power
+result.
+
+The Model Composer pack in `modelcomposer/hdl/` (wrapper, bundle, signal generator, self-test) has three further testbenches
+in `tb/` (`tb_bt_psd_mc.v`, `tb_sig_gen.v`, `tb_bt_psd_selftest.v`); see `docs/MODEL_COMPOSER.md`.
 
 | File | Content |
 |---|---|
@@ -21,10 +27,10 @@ lengths, windows and `ROUND = 0` need vectors generated for them. There is no sy
 | `btpsd_params.vh` | latencies shared by the sources (`LAT_CRU`, `LAT_BFLY`) |
 | `cru_rom.v`, `btpsd_consts.vh` | **generated** by `python/scripts/gen_rtl.py` (ROM, filter taps `FD_H0..5`, window taps `WIN_*`); do not edit |
 
-Parameters worth knowing: `WL` (data word length; the testbenches use 16 for the blocks and 12 for the top levels, other values need vectors generated for that word length),
+Parameters worth knowing: `WL` (data word length; the top levels are verified for 10, 12, 14 and 16, the blocks at 16),
 `ROUND` (1: round half up, 0: truncate), `ACCW` / `BACCW` (accumulator widths; worst-case bounds in
 `docs/ARCHITECTURE.md`), `LOGB` (bispectrum bins per axis `2**LOGB`, at most 8), `SQ_SERIAL` (serial squarer).
 The window defaults to Hann; the taps of the other windows are available as `WIN_RECT_*`, `WIN_HAMMING_*`,
-`WIN_BLACKMAN_*` and are passed as parameters.
+`WIN_BLACKMAN_*` and are passed as parameters (all four are covered by the matrix).
 
 Regenerate the generated files and the vectors with `make -C sim vectors` (needs numpy and scipy).

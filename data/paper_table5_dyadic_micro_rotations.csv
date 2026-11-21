@@ -1,0 +1,9 @@
+n,printed_tg_wi,printed_angle_token,printed_angle_deg,computed_2^-n,computed_atan_deg,source
+0,1,450,45,1,45.0000,"paper-reported, Integration 99 (2024) 102241, Table 5; printed_* columns as printed, computed_* columns analytic, computed here"
+1,0.25,26.560,26.56,0.5,26.5651,"paper-reported, Integration 99 (2024) 102241, Table 5; printed_* columns as printed, computed_* columns analytic, computed here"
+2,0.125,14.030,14.03,0.25,14.0362,"paper-reported, Integration 99 (2024) 102241, Table 5; printed_* columns as printed, computed_* columns analytic, computed here"
+3,0.0625,7.1250,7.125,0.125,7.1250,"paper-reported, Integration 99 (2024) 102241, Table 5; printed_* columns as printed, computed_* columns analytic, computed here"
+4,0.03125,3.5760,3.576,0.0625,3.5763,"paper-reported, Integration 99 (2024) 102241, Table 5; printed_* columns as printed, computed_* columns analytic, computed here"
+5,0.03125,1.7870,1.787,0.03125,1.7899,"paper-reported, Integration 99 (2024) 102241, Table 5; printed_* columns as printed, computed_* columns analytic, computed here"
+6,0.01562,0.8930,0.893,0.015625,0.8952,"paper-reported, Integration 99 (2024) 102241, Table 5; printed_* columns as printed, computed_* columns analytic, computed here"
+7,0.00781,0.4460,0.446,0.0078125,0.4476,"paper-reported, Integration 99 (2024) 102241, Table 5; printed_* columns as printed, computed_* columns analytic, computed here"

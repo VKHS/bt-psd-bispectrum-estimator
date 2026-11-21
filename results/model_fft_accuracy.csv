@@ -1,0 +1,65 @@
+input,wl,rounding,sqnr_fixed_db,sqnr_predicted_db,sqnr_quantisation_only_predicted_db,sqnr_rom_only_db
+white noise,8,round,3.67,3.5,3.5,47.1
+white noise,8,trunc,2.52,,,47.1
+white noise,10,round,15.95,15.54,15.55,47.1
+white noise,10,trunc,14.28,,,47.1
+white noise,12,round,27.66,27.54,27.59,47.1
+white noise,12,trunc,26.41,,,47.1
+white noise,14,round,39.06,38.91,39.63,47.1
+white noise,14,trunc,37.9,,,47.1
+white noise,16,round,45.89,45.8,51.67,47.1
+white noise,16,trunc,45.33,,,47.1
+white noise,18,round,47.06,47.01,63.71,47.1
+white noise,18,trunc,46.93,,,47.1
+white noise,20,round,47.1,47.09,75.75,47.1
+white noise,20,trunc,47.07,,,47.1
+white noise,24,round,47.1,47.1,99.83,47.1
+white noise,24,trunc,47.1,,,47.1
+full-scale tone,8,round,15.5,11.05,11.05,46.36
+full-scale tone,8,trunc,14.56,,,46.36
+full-scale tone,10,round,27.91,23.07,23.09,46.36
+full-scale tone,10,trunc,26.17,,,46.36
+full-scale tone,12,round,37.74,34.81,35.13,46.36
+full-scale tone,12,trunc,37.29,,,46.36
+full-scale tone,14,round,44.98,43.73,47.17,46.36
+full-scale tone,14,trunc,44.79,,,46.36
+full-scale tone,16,round,46.25,46.14,59.21,46.36
+full-scale tone,16,trunc,46.23,,,46.36
+full-scale tone,18,round,46.36,46.35,71.25,46.36
+full-scale tone,18,trunc,46.36,,,46.36
+full-scale tone,20,round,46.36,46.36,83.29,46.36
+full-scale tone,20,trunc,46.36,,,46.36
+full-scale tone,24,round,46.36,46.36,107.37,46.36
+full-scale tone,24,trunc,46.36,,,46.36
+six tones,8,round,6.54,5.08,5.08,46.31
+six tones,8,trunc,5.58,,,46.31
+six tones,10,round,19.0,17.12,17.12,46.31
+six tones,10,trunc,17.78,,,46.31
+six tones,12,round,30.24,29.08,29.16,46.31
+six tones,12,trunc,29.53,,,46.31
+six tones,14,round,40.66,40.04,41.2,46.31
+six tones,14,trunc,39.74,,,46.31
+six tones,16,round,45.43,45.51,53.24,46.31
+six tones,16,trunc,45.58,,,46.31
+six tones,18,round,46.28,46.26,65.29,46.31
+six tones,18,trunc,46.27,,,46.31
+six tones,20,round,46.3,46.31,77.33,46.31
+six tones,20,trunc,46.31,,,46.31
+six tones,24,round,46.31,46.31,101.41,46.31
+six tones,24,trunc,46.31,,,46.31
+EEG-like,8,round,4.76,4.5,4.5,48.3
+EEG-like,8,trunc,3.29,,,48.3
+EEG-like,10,round,16.56,16.54,16.54,48.31
+EEG-like,10,trunc,15.63,,,48.31
+EEG-like,12,round,28.91,28.54,28.58,48.31
+EEG-like,12,trunc,27.41,,,48.31
+EEG-like,14,round,40.56,39.94,40.63,48.31
+EEG-like,14,trunc,38.97,,,48.31
+EEG-like,16,round,47.13,46.95,52.67,48.31
+EEG-like,16,trunc,46.53,,,48.31
+EEG-like,18,round,48.2,48.21,64.71,48.31
+EEG-like,18,trunc,48.11,,,48.31
+EEG-like,20,round,48.31,48.3,76.75,48.31
+EEG-like,20,trunc,48.28,,,48.31
+EEG-like,24,round,48.31,48.31,100.83,48.31
+EEG-like,24,trunc,48.31,,,48.31

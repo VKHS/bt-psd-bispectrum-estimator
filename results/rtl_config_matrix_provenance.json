@@ -1,0 +1,19 @@
+{
+  "what": "RTL simulation (Icarus Verilog) of tb/tb_psd_top.v and tb/tb_bispectrum_top.v for the configurations of python/scripts/run_rtl_matrix.py; the Python model only supplies the expected values",
+  "repository": "VKHS/bt-psd-bispectrum-estimator",
+  "workflow": "ci / job rtl-matrix",
+  "run_id": 44810653980,
+  "run_url": "https://github.com/VKHS/bt-psd-bispectrum-estimator/actions/runs/44810653980",
+  "commit": "91ce7de1b694b873bb158f71432033023bb468de",
+  "run_created_utc": "2026-11-20T20:21:43Z",
+  "simulator": "Icarus Verilog, apt package of the ubuntu-latest runner (version not printed in the log)",
+  "configurations": 25,
+  "passed": 25,
+  "columns": {
+    "round": "RTL parameter ROUND (1: round half up, 0: truncate)",
+    "squarer": "serial sum-of-odds squarer or multiplier (RTL parameter SQ_SERIAL; psd only)",
+    "segments": "PSD segments or bispectrum frames of the vectors",
+    "words_checked": "result words compared with the model: 1024 PSD bins, or 32 x 32 bispectrum bins (real and imaginary part compared together)",
+    "model_clamped_diffs": "rounded butterfly differences that the model's clamp changed while building the vectors (reachable only with rounding)"
+  }
+}

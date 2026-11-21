@@ -2,10 +2,11 @@
 import numpy as np
 
 from _common import RESULTS
-from btpsd.estimator import HwConfig, psd_exact_welch, psd_fixed
+from btpsd.estimator import HwConfig, hw_power_scale, psd_exact_welch, psd_fixed
 from btpsd.fdfilter import PAPER_FD6, PAPER_FD6_START, fd_kernel, merge_chunk_spectra
 from btpsd.metrics import sqnr_db
-from btpsd.signals import eeg_like, qpc
+from btpsd.reference import periodogram
+from btpsd.signals import ar2_lowpass, eeg_like, qpc, white
 
 
 def read_csv(name):
@@ -81,3 +82,29 @@ def squarer_cycles(wl, nchunks=9, seed=3, window="hann"):
     res = psd_fixed(x, HwConfig(wl=wl, window=window))
     _, cyc = mag_sq(res.X_re[:, :513], res.X_im[:, :513], units=2)
     return np.asarray(cyc).ravel()
+
+
+def psd_examples(wl: int = 10, window_name: str = "hann", nchunks: int = 10, seed: int = 3, fs: float = 256.0):
+    """Synthetic records with their float and hardware-model PSDs (``wl``-bit datapath); sheet ``fig22_psd_examples``."""
+    n = 512 * nchunks
+    sigs = {"EEG-like": eeg_like(n, fs=fs, seed=seed), "AR(2) narrow-band": ar2_lowpass(n, seed=seed), "white noise": white(n, seed=seed)}
+    out = {}
+    for name, x in sigs.items():
+        ref = psd_exact_welch(x, window_name)
+        res = psd_fixed(x, HwConfig(wl=wl, window=window_name))
+        hw = res.to_float()
+        out[name] = {"x": x, "ref": ref, "hw": hw, "P_int": res.P_int, "lsb": hw_power_scale(wl, res.S, res.avg_shift),
+                     "blk": periodogram(x[:1024], window=window_name), "sqnr": sqnr_db(ref, hw)}
+    return out
+
+
+PSD_EXAMPLE_HEADER = ["signal", "window", "wl", "record_samples", "seed", "sqnr_vs_exact_welch_db", "psd_lsb_db", "zero_bins_of_513"]
+
+
+def psd_example_rows(wl: int = 10, window_name: str = "hann", nchunks: int = 10, seed: int = 3):
+    """Numbers printed on ``fig22_psd_examples`` (rows of ``results/model_psd_examples_wl10.csv``)."""
+    rows = []
+    for name, e in psd_examples(wl, window_name, nchunks, seed).items():
+        rows.append([name, window_name, wl, 512 * nchunks, seed, round(float(e["sqnr"]), 3), round(float(10 * np.log10(e["lsb"])), 3),
+                     int((e["P_int"][:513] == 0).sum())])
+    return rows

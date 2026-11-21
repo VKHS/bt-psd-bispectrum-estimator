@@ -20,9 +20,11 @@ from .cordic import default_rom, rotate_fixed
 from .estimator import HwConfig
 from .fixedpoint import rshift, saturate
 from .r8fft import dft8_fixed
+from .squarer import mag_sq
 
 __all__ = ["LAT_CRU", "LAT_BFLY", "LAT", "stall_cycles", "row_fn", "twq", "Fft512Rtl", "psd_segment_loops",
-           "bispectrum_frame_loops"]
+           "bispectrum_frame_loops", "PSD_STATES", "BSP_STATES", "psd_engine_state_cycles", "bispectrum_engine_state_cycles",
+           "write_back_slack", "squarer_wait_histogram"]
 
 LAT_CRU = 4  # register stages of rtl/cru_rotate.v
 LAT_BFLY = 1 + LAT_CRU + 1 + LAT_CRU  # rtl/r8_butterfly.v
@@ -186,3 +188,75 @@ def bispectrum_frame_loops(Fr, Fi, cfg, logb: int):
             tre[f1, f2] = pr * cr + pi_ * ci
             tim[f1, f2] = pi_ * cr - pr * ci
     return tre, tim
+
+
+# ---- cycles per FSM state (formulas read off the case arms of rtl/psd_engine.v and rtl/bispectrum_engine.v) -------------
+PSD_STATES = ("S_IDLE", "S_CLR", "M_A", "M_B", "M_C", "M_F", "W_A", "W_B", "W_C", "W_F", "W_G", "W_S", "W_ACC", "S_END")
+BSP_STATES = ("S_IDLE", "S_CLR", "W_A", "W_B", "W_C", "W_F", "R_A", "R_B", "R_C", "T_A", "T_B", "T_C", "T_D", "S_END")
+
+
+def psd_engine_state_cycles(segments: int, squarer_cycles: int, clears: int = 1, serial: bool = True) -> dict[str, int]:
+    """Cycles spent in each busy state of ``psd_engine`` for ``clears`` clear operations and ``segments`` segments.
+
+    ``squarer_cycles`` is the sum over all bins of all segments of ``max(|re|, |im|)`` (:func:`btpsd.squarer.mag_sq`).
+    Per segment: merge ``512 x (6 taps x 3 cycles + M_F)``, window ``1024 x (5 taps x 3 cycles + W_F + W_G + W_S + W_ACC)``.
+    ``W_S`` is entered with the cycle in which ``sq_start`` is high, so it lasts ``n + 3`` cycles for a serial squarer
+    (``done`` is visible ``n + 2`` cycles after the start cycle) and 2 cycles for the multiplier variant.  ``S_IDLE`` is
+    not modelled (it is the time spent waiting).
+    """
+    wsum = (3 * 1024 * segments + squarer_cycles) if serial else 2 * 1024 * segments
+    return {
+        "S_CLR": 1024 * clears,
+        "M_A": 3072 * segments, "M_B": 3072 * segments, "M_C": 3072 * segments, "M_F": 512 * segments,
+        "W_A": 5120 * segments, "W_B": 5120 * segments, "W_C": 5120 * segments, "W_F": 1024 * segments,
+        "W_G": 1024 * segments, "W_S": wsum, "W_ACC": 1024 * segments,
+        "S_END": clears + segments,
+    }
+
+
+def bispectrum_engine_state_cycles(frames: int, logb: int, clears: int = 1) -> dict[str, int]:
+    """Cycles spent in each busy state of ``bispectrum_engine`` for ``clears`` clears and ``frames`` frames.
+
+    ``MAXB = 2**logb``.  Per frame: window ``2 MAXB x (5 taps x 3 cycles + W_F)``, ``MAXB`` visits of ``R_A .. R_C`` and
+    ``MAXB**2`` visits of ``T_A .. T_D`` (``5216`` cycles for ``MAXB = 32``).
+    """
+    maxb = 1 << logb
+    nb = 2 * maxb
+    return {
+        "S_CLR": maxb * maxb * clears,
+        "W_A": 5 * nb * frames, "W_B": 5 * nb * frames, "W_C": 5 * nb * frames, "W_F": nb * frames,
+        "R_A": maxb * frames, "R_B": maxb * frames, "R_C": maxb * frames,
+        "T_A": maxb * maxb * frames, "T_B": maxb * maxb * frames, "T_C": maxb * maxb * frames, "T_D": maxb * maxb * frames,
+        "S_END": clears + frames,
+    }
+
+
+def write_back_slack(stall: int | None = None, lat: int = LAT) -> dict[int, np.ndarray]:
+    """Slack in cycles of the 64 butterflies of pass 1 and pass 2 against the write-back of the previous pass.
+
+    The slack of a butterfly is its issue slot minus the first slot in which its last input word can be read, i.e. the
+    issue slot of the producing butterfly of the previous pass plus ``lat``.  A negative value is a read-after-write
+    hazard.  With the stall of the RTL the smallest slack is 0 (pass 1, butterflies 0 .. 7); one stall cycle less gives -1.
+    """
+    from .schedule import pass_addresses
+
+    stall = stall_cycles(lat) if stall is None else stall
+    slot = {(p, b): t for t, p, b in Fft512Rtl().issue_schedule(stall)}
+    out: dict[int, np.ndarray] = {}
+    for p in (1, 2):
+        producer = {int(a): b2 for b2, adr in enumerate(pass_addresses(p - 1)) for a in adr}
+        readable = [max(slot[(p - 1, producer[int(a)])] + lat for a in pass_addresses(p)[b]) for b in range(64)]
+        out[p] = np.array([slot[(p, b)] - readable[b] for b in range(64)])
+    return out
+
+
+def squarer_wait_histogram(Wr, Wi, units: int = 2) -> dict[int, int]:
+    """Histogram of the ``W_S`` residence of ``psd_engine``: one visit per bin, ``n + 3`` cycles (serial squarer).
+
+    ``n`` is the squarer time of the bin (:func:`btpsd.squarer.mag_sq`, ``max(|re|, |im|)`` for two units).  The keys are
+    ``floor(log2(residence))``, the binning of ``results/rtl_squarer_wait_hist.csv`` (written by the testbench).
+    """
+    _, cyc = mag_sq(np.asarray(Wr), np.asarray(Wi), units)
+    resid = np.asarray(cyc, dtype=np.int64).ravel() + 3
+    k = np.floor(np.log2(resid)).astype(int)
+    return {int(b): int((k == b).sum()) for b in np.unique(k)}
